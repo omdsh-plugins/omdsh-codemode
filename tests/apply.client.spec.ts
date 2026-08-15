@@ -23,7 +23,7 @@ function bench(options: {
   current?: string
   workspacePath?: string
   chord?: string
-  /** Compose without the mode switch, the way a profile with no Chat mode does. */
+  /** Compose without the mode switch, the way a profile with no omdsh-base does. */
   modes?: false
 } = {}) {
   const current = options.current ?? 's1'
@@ -125,7 +125,7 @@ describe('omdsh-code browser half', () => {
     // `sessionModes` is NOT here on purpose. cordis waits for an injected
     // service forever, and the client boot fails the whole page for a loader
     // entry left PENDING — so naming a contributed service here would turn a
-    // profile without Chat mode from "Code mode off" into "the page is dead".
+    // profile without omdsh-base from "Code mode off" into "the page is dead".
     expect(inject).toEqual(['slots', 'sessions', 'workspaces', 'locale'])
     expect(inject).not.toContain('sessionModes')
   })

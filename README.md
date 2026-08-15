@@ -70,7 +70,7 @@ Pressing **New Session** while Code mode holds the column means another Code con
 
 The conversation is **named here rather than asked for**, and that is what makes the request idempotent: the socket reconnects, the column remounts, the window resizes, and every one of those asks for the same conversation instead of starting another terminal. The socket says `fresh`, which tells the host this id is newly minted rather than resumed — nobody can be holding it, so its terminal becomes this directory's terminal from the moment it starts.
 
-Until its first turn is persisted the new conversation has no row, so the sidebar goes on showing the one you came from. The moment the row exists, it is selected: the screen agrees with itself again, and the ordinary derivation takes over from there without disturbing the terminal.
+Until its first turn is persisted the new conversation has no row, so the sidebar goes on showing the one you came from. The row appears on its own once that turn lands — and the selection does not move with it, because a Code conversation is **shown, never selected**: making one the runtime's current session is what makes this host resume it, on a log its terminal is still appending to. The cost is the sidebar highlight, which stays on the web conversation behind the terminal.
 
 Two details are worth knowing before they surprise you:
 
@@ -119,6 +119,11 @@ dsh plugin --profile web remove @omdsh-plugins/omdsh-code
 Without [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) the profile still composes and boots, and this plugin's browser half mounts and does nothing: `sessionModes` is resolved by service name, and every registration below it rides a restricted fiber that waits for it. That is the intended off state — there is no switch for a third segment to appear in, so Code mode leaves the page exactly as it found it.
 
 What that off state must NOT be is a top-level `inject` on `sessionModes`. cordis waits for an injected service forever, and the web client sweeps every loader entry once the tree settles and fails the whole page for any left `pending` — so naming a contributed service there turns "Code mode is off" into `web boot: 1 entry did not activate`, a dead UI rather than a missing segment. The rule generalises to every service another plugin publishes, and is written down in [CONVENTIONS.md](https://github.com/omdsh-plugins/omdsh-plugins/blob/HEAD/CONVENTIONS.md).
+
+Two further companions are optional in the same way, reached the same way, and each has an off state that costs nothing:
+
+- [omdsh-shortcuts](https://github.com/omdsh-plugins/omdsh-shortcuts) publishes `shortcut`. With it, the **Code** segment's tooltip names the chord that enters this mode and follows a rebinding with no reload. Without it the segment is unchanged and simply claims no key — this plugin binds none of its own, because entering a mode already has a published seam the keybinding layer calls.
+- [omdsh-remdev](https://github.com/omdsh-plugins/omdsh-remdev) publishes `remdev`. With it, a workspace standing in for a directory on a server runs its terminal **there** — same conversation, same `--session-id`, a different machine — and the conversations it writes are pulled home as soon as the terminal's socket ends. Without it every directory is an ordinary local one and the terminal starts here, which is the mode this plugin shipped in.
 
 ## Known limitations
 

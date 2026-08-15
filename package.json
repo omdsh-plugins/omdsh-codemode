@@ -46,7 +46,14 @@
       "displayName": {
         "": "Code Mode",
         "zh": "代码模式"
-      }
+      },
+      "summary": {
+        "": "A harness terminal in the conversation's workspace, beside Chat and Work.",
+        "zh": "在对话所属的工作区里开一个 harness 终端，与 Chat、Work 并列。"
+      },
+      "category": "workspace",
+      "docs": "https://github.com/omdsh-plugins/omdsh-code#readme",
+      "order": 40
     }
   },
   "files": [
@@ -83,6 +90,7 @@
     "@deepseek-ai/dsh-client-locale": "*",
     "@deepseek-ai/dsh-client-runtime": "*",
     "@deepseek-ai/dsh-client-ui-layout": "*",
+    "@deepseek-ai/dsh-client-ui-primitives": "*",
     "@deepseek-ai/dsh-client-ui-slots": "*",
     "@deepseek-ai/dsh-host-webserver": "*",
     "@deepseek-ai/dsh-invariants": "*",

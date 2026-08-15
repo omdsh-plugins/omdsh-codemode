@@ -16,10 +16,10 @@
  * on every row. Both are the registry's business, not this file's; all this
  * plugin does is answer for itself.
  *
- * Its dependency on Chat mode is the switch, not the package: the registry is
- * resolved by service name, so a composition without it never publishes
- * `sessionModes` and this plugin does nothing at all. That is the off state,
- * and it needs no configuration.
+ * Its dependency on the mode system is the switch, not the package: the
+ * registry is resolved by service name, so a composition without
+ * `@omdsh-plugins/omdsh-base` never publishes `sessionModes` and this plugin
+ * does nothing at all. That is the off state, and it needs no configuration.
  *
  * What carries that dependency is a RESTRICTED fiber and not this plugin's own
  * `inject`, because the two are not the same thing to the client's boot audit.
@@ -195,13 +195,13 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
   ctx.effect(() => () => { titles.dispose() }, 'omdsh-code: terminal title sync')
 
   const t = ctx.locale.bind(NS)
-  /** This plugin's segment copy, in the reader's current language. */
   /**
    * The chord this segment teaches. Empty unless a keybinding layer is composed
    * AND its document has arrived, which is why it is re-applied through
    * {@link applyCopy} rather than read once at registration.
    */
   let chord: string | undefined
+  /** This plugin's segment copy, in the reader's current language. */
   const copy = () => ({
     label: t('mode.code'),
     // The chord rides the HINT, not the label: the pill is three short words

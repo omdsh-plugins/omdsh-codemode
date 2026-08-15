@@ -303,6 +303,17 @@ export function apply(ctx: Context, config: Config = {}): void {
             // it), so accounting is a schedule rather than a call; it is
             // idempotent per session, so a reconnect costs nothing.
             accountant.track(codeSessionId, cwd)
+            if (ws.readyState !== ws.OPEN) {
+              // The surface left while the terminal was being allocated, which
+              // a remote one gives real time to. The bridge is what starts the
+              // reconnect grace, and it starts it from a `close` that has
+              // already been emitted — so this terminal would be the one kind
+              // that never expires, holding its conversation against whoever
+              // opens it next. Ask for the grace here instead: coming straight
+              // back still lands on the same process.
+              terminals.scheduleClose(codeSessionId)
+              return
+            }
             bridge(ws, terminal, terminals, {
               onEnd: () => { void settle(remote, accountant, codeSessionId, cwd) },
             })
