@@ -1,0 +1,10 @@
+# pnpm 10+ blocks any dependency shipping an install/build script until it is
+# explicitly reviewed here.
+allowBuilds:
+  # node-pty allocates the terminal Code mode's column attaches to. It ships
+  # prebuilt binaries for the common platforms and its install script only
+  # selects (or, failing that, compiles) one — there is no terminal without
+  # it, so this build is the point of the dependency rather than an incidental
+  # extra. The harness itself carries the same package for the same reason
+  # (packages/subprocess/subprocess-local).
+  node-pty: true

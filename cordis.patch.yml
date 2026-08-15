@@ -1,0 +1,34 @@
+# The omdsh-code bundle patch: one row, inserted over whatever the profile
+# already composed.
+#
+# This package is a PROFILE LAYER, not a harness edit. `dsh plugin --profile
+# web add @omdsh-plugins/omdsh-code` installs it into the profile directory and
+# appends it to `dsh.profile.bundles`, so this file is applied after
+# `@deepseek-ai/dsh-base`, `@deepseek-ai/dsh-web-app`, and (where it is
+# installed) `@omdsh-plugins/omdsh-justchat` — the harness tree stays exactly as
+# it shipped, and removing the plugin removes the row with it.
+#
+# The row is dual-face, the ordinary `dsh.client` shape:
+#
+#   - node half (`lib/index.js`, loaded here) serves one WebSocket that starts
+#     `dsh --profile <name>` in a conversation's own workspace directory,
+#     behind the same browser-trust check the `/api` gateway applies;
+#   - browser half (`lib/client.js`) is picked up by `dsh-client-modules`,
+#     which scans every loader entry for a `dsh.client` declaration — an
+#     out-of-tree row is found exactly like an in-box one.
+#
+# The browser half waits on `sessionModes`, the segment registry published by
+# omdsh-justchat's client half — on a RESTRICTED fiber, never through its own
+# `inject`. A profile with this bundle and not that one composes and boots, and
+# the client plugin mounts and registers nothing, because there is no switch
+# for it to appear in. That is the intended off state, so this row states no
+# dependency the loader would have to enforce.
+#
+# The restriction is load-bearing, not a style choice: cordis's inject wait has
+# no timeout, and the web client fails the whole page for any loader entry still
+# `pending` after the tree settles. An `inject` on a service that only another
+# plugin publishes makes a missing companion fatal to the entire UI.
+
+- insert:
+    - id: code-mode
+      name: '@omdsh-plugins/omdsh-code'
