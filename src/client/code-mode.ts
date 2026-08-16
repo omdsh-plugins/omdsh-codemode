@@ -16,7 +16,20 @@
  *    web conversation and not a change of mode. The id is minted here (see
  *    {@link CodeModeController.startNewConversation}) because nothing else in
  *    the system knows about a conversation that has not had its first turn yet.
- * 4. **Who pressed Code?** Opening a Code conversation IS pressing Code:
+ * 4. **What does pressing Code mean with nothing open?** A terminal needs a
+ *    DIRECTORY, and a conversation is only one of the ways to name one — so a
+ *    press with nothing on screen starts a terminal in the project the runtime
+ *    itself would land in ({@link CodeModeController.ensureScope}), and a press
+ *    with no project registered anywhere asks where, through the Host's own
+ *    picker ({@link CodeModeController.chooseProject}). Neither derives; both
+ *    happen on the press, so a page nobody pressed Code on starts nothing.
+ *
+ *    This is where the mode was dead before. Its availability was the scope's,
+ *    the scope is derived from the selection, and nothing selects a
+ *    conversation on a fresh install — a case invisible for as long as
+ *    `omdsh-justchat` was composed beside it, because its managed Chat
+ *    workspace means a conversation is always open.
+ * 5. **Who pressed Code?** Opening a Code conversation IS pressing Code:
  *    clicking that row anywhere — the sidebar, search, the flat list — means
  *    "show me this terminal", so the column follows the selection instead of
  *    waiting for a second gesture on the switch. And opening anything else is
@@ -66,12 +79,51 @@ export interface CodeModeDeps {
    * until its summary lands, and the baseline is only pulled on connect.
    */
   refreshSessions(): void
+  /**
+   * Open the Host's own directory picker — the same gesture the frame's empty
+   * state offers under "Choose workspace".
+   * @returns the chosen path, or null when the user cancelled.
+   */
+  pickDirectory(): Promise<string | null>
+  /**
+   * Register a directory as a project, so a terminal started in it is
+   * accounted for like any other conversation and its row appears where the
+   * user expects it.
+   * @param path - the directory the picker returned.
+   * @returns its canonical path, as the Host recorded it.
+   */
+  registerProject(path: string): Promise<string>
 }
 
 /** Derives the terminal's scope and follows Code conversations into the column. */
 export class CodeModeController {
   /** What the column's socket is built from; `undefined` while there is nowhere to run. */
   readonly scope: SnapshotStore<Scope | undefined> = createSnapshotStore<Scope | undefined>(undefined)
+
+  /**
+   * Whether pressing Code would go anywhere: a terminal to show, a project to
+   * start one in, or a Host that can still be asked where.
+   *
+   * A store of its own rather than `scope !== undefined`, because those are two
+   * different questions and only one of them is about a conversation. What Code
+   * SHOWS is derived from the conversation on screen, and a page that has never
+   * opened one derives nothing — which is precisely the fresh install this mode
+   * used to be permanently grey in.
+   */
+  readonly enterable: SnapshotStore<boolean> = createSnapshotStore<boolean>(true)
+
+  /**
+   * Whether the Host can still be asked where a terminal should run.
+   *
+   * Optimistic, and downgraded by evidence rather than by a probe: the picker
+   * seam has two backends and only the native one answers
+   * {@link CodeModeDeps.pickDirectory} — a remote or headless Host drives an
+   * in-app browser instead, which is ui-workspace's own component and not
+   * something a contributed mode can open. There is no way to ask which is
+   * mounted, so the first press that finds out is what tells this segment to
+   * stop offering the cold start and say what is missing instead.
+   */
+  private askable = true
 
   /**
    * The Code session each directory's terminal is currently driving, as the
@@ -165,6 +217,7 @@ export class CodeModeController {
     if (cwd === undefined || cwd === '') return false
     this.pinned = { sessionId: codeSessionId, cwd, codeSessionId }
     this.scope.set(this.pinned)
+    this.settleEnterable()
     this.deps.enterCode()
     return true
   }
@@ -181,6 +234,73 @@ export class CodeModeController {
    */
   codeSessionIn(cwd: string): string | undefined {
     return this.attached.get(cwd)
+  }
+
+  /**
+   * Make sure there is a terminal to show — what PRESSING Code has to mean on a
+   * page where nothing is open.
+   *
+   * The conversation is minted here rather than derived, and on the press rather
+   * than in {@link CodeModeController.recompute}, which is the whole point:
+   * deriving must stay free of consequences, so a page nobody pressed Code on
+   * starts no terminal, while a page where somebody did gets one in the project
+   * they are already looking at. Nothing is minted when there is something to
+   * show — the ordinary case, and pressing Code then is a change of column and
+   * nothing else.
+   * @returns true when there is something to show; false when no project is
+   * registered anywhere, which is the cold start — see
+   * {@link CodeModeController.chooseProject}, not a refusal.
+   */
+  ensureScope(): boolean {
+    if (this.scope.getSnapshot() !== undefined) return true
+    const workspaceId = this.defaultWorkspace()
+    if (workspaceId === undefined) return false
+    return this.startNewConversation(workspaceId)
+  }
+
+  /**
+   * Ask where the terminal should run, and take the column once there is an
+   * answer — the COLD START, and the only thing pressing Code can honestly mean
+   * on a page with no project registered anywhere.
+   *
+   * The Host's own directory picker, because that is already the gesture this
+   * screen asks for: a harness with no project shows "Choose workspace" and
+   * nothing else, and a mode that greyed itself out instead would leave the
+   * person to discover that other button before this one would work. Registering
+   * the directory afterwards is what makes the answer stick — the project joins
+   * the sidebar, and the terminal is accounted under it like any conversation.
+   *
+   * Cancelling leaves the column exactly where it was — nothing was chosen, so
+   * nothing changes. A Host with no picker THIS side can open is the other
+   * outcome, and the one that has to be remembered: see
+   * {@link CodeModeController.askable}.
+   */
+  async chooseProject(): Promise<void> {
+    let picked: string | null
+    try {
+      picked = await this.deps.pickDirectory()
+    } catch {
+      // The Host has no picker THIS side can open — the browse backend, whose
+      // in-app browser belongs to ui-workspace. Stop offering the cold start
+      // and let the segment say what is missing, rather than leaving a press
+      // that does nothing.
+      this.askable = false
+      this.settleEnterable()
+      return
+    }
+    if (picked === null || picked === '') return
+    let cwd: string
+    try {
+      // The Host's canon rather than the picker's string: a workspace is keyed
+      // on the resolved path, and a terminal started on the other one would be
+      // accounted under a project the sidebar shows separately.
+      cwd = await this.deps.registerProject(picked)
+    } catch {
+      // A directory the Host refused to register. The picker still works, so
+      // this is one failed answer rather than a mode that cannot be entered.
+      return
+    }
+    if (this.startIn(cwd)) this.deps.enterCode()
   }
 
   /**
@@ -205,6 +325,17 @@ export class CodeModeController {
     const cwd = workspaceId === undefined
       ? this.scope.getSnapshot()?.cwd
       : this.deps.workspaces.getSnapshot().items.find(item => item.workspaceId === workspaceId)?.path
+    return this.startIn(cwd)
+  }
+
+  /**
+   * Start a Code conversation in one directory — the single writer of a minted
+   * scope, shared by New Session and by the two presses that have to make the
+   * thing they are switching to.
+   * @param cwd - the directory the terminal runs in, when one is known.
+   * @returns true when a conversation was started.
+   */
+  private startIn(cwd: string | undefined): boolean {
     if (cwd === undefined || cwd === '') return false
     const codeSessionId = mintCodeSessionId()
     this.pinned = { sessionId: codeSessionId, cwd, codeSessionId, fresh: true }
@@ -213,7 +344,33 @@ export class CodeModeController {
     // conversation the user is LEAVING would start the new terminal in that
     // one's directory whenever the two differ.
     this.scope.set(this.pinned)
+    this.settleEnterable()
     return true
+  }
+
+  /**
+   * The project a terminal runs in when no conversation names one.
+   *
+   * The runtime's own "most recently active" answer first — the project the
+   * user was last in, which is what pressing Code with nothing open should come
+   * back to — and the top of the workspace list under it, because that is the
+   * sidebar's first group and so where the user would have clicked anyway.
+   * @returns its workspace id, or undefined when no project is registered.
+   */
+  private defaultWorkspace(): string | undefined {
+    const { items, recentWorkspaceId } = this.deps.workspaces.getSnapshot()
+    const usable = items.filter(item => item.path !== '')
+    return usable.find(item => item.workspaceId === recentWorkspaceId)?.workspaceId
+      ?? usable[0]?.workspaceId
+  }
+
+  /** Settle whether pressing Code would go anywhere; see {@link CodeModeController.enterable}. */
+  private settleEnterable(): void {
+    this.enterable.set(
+      this.scope.getSnapshot() !== undefined
+      || this.defaultWorkspace() !== undefined
+      || this.askable,
+    )
   }
 
   /** Re-derive the scope, and follow a newly opened Code conversation. */
@@ -250,6 +407,9 @@ export class CodeModeController {
     ) {
       this.scope.set(next)
     }
+    // After the scope, and unconditionally: a project registered (or the last
+    // one removed) moves this without moving the scope at all.
+    this.settleEnterable()
 
     this.pullMissingRows()
 

@@ -152,6 +152,11 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
     enterCode: () => { modes.update(SEGMENT_ID, { active: true }) },
     clearSelection: () => { sessions.clear() },
     refreshSessions,
+    pickDirectory: () => workspaces.pickDirectory(),
+    // The Host's canon for the path, which is what the workspace is keyed on;
+    // an already-registered directory resolves to the same project rather than
+    // a second one, so pressing Code twice on the same answer is idempotent.
+    registerProject: async (path: string) => (await workspaces.create({ path })).path,
   })
   ctx.effect(() => controller.start(), 'omdsh-code: derived terminal scope')
 
@@ -241,11 +246,29 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
     // while this segment holds the column, which is why the store below can go
     // on deriving what Code mode WOULD show at all times.
     scope: controller.scope,
-    available: controller.scope.getSnapshot() !== undefined,
+    // Whether a terminal has anywhere to run, which this segment used to answer
+    // with the SCOPE — derived from the selected conversation, and so empty on a
+    // page that has never opened one. That made Code permanently grey in the one
+    // composition where this plugin is the only mode plugin: a fresh install
+    // with `omdsh-base` alone selects nothing, where `omdsh-justchat`'s managed
+    // Chat workspace always has something open. What a terminal needs is a
+    // DIRECTORY, and a conversation is only one of the ways to name one.
+    available: controller.enterable.getSnapshot(),
     // Pressing Code is the whole state change. Marking the segment active
     // clears the others, and the column registration below follows from that
     // one flag rather than from a second source of truth.
-    enter: () => { modes.update(SEGMENT_ID, { active: true }) },
+    enter: () => {
+      // Something to show already, or a project to start a terminal in: take
+      // the column now.
+      if (controller.ensureScope()) {
+        modes.update(SEGMENT_ID, { active: true })
+        return
+      }
+      // Neither, which is the cold start. Asking the Host where is the only
+      // honest answer, and the column is taken when (and if) one comes back —
+      // the controller does that itself, through `enterCode` above.
+      void controller.chooseProject()
+    },
     // New Session, while this mode holds the column, is a request for another
     // terminal — not for the web conversation the frame would otherwise show,
     // which would take the column and change the mode under the user. A
@@ -254,11 +277,11 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
     newSession: (workspaceId?: string) => controller.startNewConversation(workspaceId),
   }), 'omdsh-code: mode segment')
 
-  // A conversation with no directory has nowhere to start a terminal.
+  // Nowhere to run, and no way left to ask where — see `enterable`.
   const followAvailability = (): void => {
-    modes.update(SEGMENT_ID, { available: controller.scope.getSnapshot() !== undefined })
+    modes.update(SEGMENT_ID, { available: controller.enterable.getSnapshot() })
   }
-  ctx.effect(() => controller.scope.subscribe(followAvailability), 'omdsh-code: segment availability')
+  ctx.effect(() => controller.enterable.subscribe(followAvailability), 'omdsh-code: segment availability')
 
   ctx.effect(() => ctx.on('locale/change', () => { applyCopy() }), 'omdsh-code: segment copy')
 

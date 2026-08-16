@@ -33,8 +33,16 @@ function sessionList(
   } as unknown as SessionListState
 }
 
-/** A workspace list snapshot. */
-function workspaceList(items: { path: string; sessionIds: string[] }[]): WorkspaceListState {
+/**
+ * A workspace list snapshot.
+ * @param items - the projects, in the sidebar's own display order.
+ * @param recent - the runtime's most-recently-active project, when it has one.
+ * @returns the snapshot.
+ */
+function workspaceList(
+  items: { path: string; sessionIds: string[] }[],
+  recent?: string,
+): WorkspaceListState {
   return {
     items: items.map((item, index) => ({
       workspaceId: `w${String(index)}`,
@@ -49,7 +57,7 @@ function workspaceList(items: { path: string; sessionIds: string[] }[]): Workspa
     phase: 'ready',
     error: null,
     baselinesReady: true,
-    recentWorkspaceId: undefined,
+    recentWorkspaceId: recent,
   } as unknown as WorkspaceListState
 }
 
@@ -57,6 +65,10 @@ function workspaceList(items: { path: string; sessionIds: string[] }[]): Workspa
 function bench(options: {
   sessions?: SessionListState
   workspaces?: WorkspaceListState
+  /** What the Host's directory picker answers; null is the cancelled dialog. */
+  picked?: string | null
+  /** A picker the Host could not open, or a directory it refused to register. */
+  pickerFails?: 'pick' | 'register'
 } = {}) {
   const sessions = createSnapshotStore(options.sessions ?? sessionList([]))
   const workspaces = createSnapshotStore(options.workspaces ?? workspaceList([]))
@@ -67,9 +79,24 @@ function bench(options: {
   const clearSelection = vi.fn(() => {
     sessions.set({ ...sessions.getSnapshot(), current: undefined } as SessionListState)
   })
-  const controller = new CodeModeController({ sessions, workspaces, enterCode, clearSelection, refreshSessions })
+  const pickDirectory = vi.fn(async () => {
+    if (options.pickerFails === 'pick') throw new Error('no picker on this Host')
+    return options.picked ?? null
+  })
+  // The Host's canon, which is what a workspace is keyed on — a spec's answer
+  // differs from the picked string so a scope built on the wrong one shows.
+  const registerProject = vi.fn(async (path: string) => {
+    if (options.pickerFails === 'register') throw new Error('not a directory')
+    return `${path}/canon`
+  })
+  const controller = new CodeModeController({
+    sessions, workspaces, enterCode, clearSelection, refreshSessions, pickDirectory, registerProject,
+  })
   const stop = controller.start()
-  return { controller, sessions, workspaces, enterCode, clearSelection, refreshSessions, stop }
+  return {
+    controller, sessions, workspaces, enterCode, clearSelection, refreshSessions,
+    pickDirectory, registerProject, stop,
+  }
 }
 
 describe('the terminal scope', () => {
@@ -202,6 +229,145 @@ describe('the terminal scope', () => {
       'session-2',
     ))
     expect(b.controller.scope.getSnapshot()?.codeSessionId).toBe('code-session-b')
+  })
+})
+
+describe('pressing Code with nothing open', () => {
+  it('starts a terminal in the project, deriving one having been impossible', () => {
+    // The fresh page: nothing is selected, so the scope has nothing to derive
+    // from — but the project is right there in the sidebar, and that is all a
+    // terminal ever needed.
+    const b = bench({ workspaces: workspaceList([{ path: '/repo', sessionIds: [] }]) })
+    expect(b.controller.scope.getSnapshot()).toBeUndefined()
+
+    expect(b.controller.ensureScope()).toBe(true)
+    const scope = b.controller.scope.getSnapshot()
+    expect(scope?.cwd).toBe('/repo')
+    expect(isCodeSessionId(scope?.codeSessionId ?? '')).toBe(true)
+    // Minted a moment ago rather than resumed, which is what tells the host
+    // nobody else can be holding it.
+    expect(scope?.fresh).toBe(true)
+  })
+
+  it('mints nothing until it is actually pressed', () => {
+    // Deriving stays free of consequences: publishing the lists over and over
+    // starts no terminal, so a page nobody pressed Code on holds no
+    // conversation id.
+    const b = bench({ workspaces: workspaceList([{ path: '/repo', sessionIds: [] }]) })
+    b.workspaces.set(workspaceList([{ path: '/repo', sessionIds: [] }]))
+    b.sessions.set(sessionList([]))
+    expect(b.controller.scope.getSnapshot()).toBeUndefined()
+  })
+
+  it('shows what is already there rather than starting another', () => {
+    const b = bench({ sessions: sessionList([summary('session-1', '/repo')], 'session-1') })
+    const before = b.controller.scope.getSnapshot()
+    expect(b.controller.ensureScope()).toBe(true)
+    expect(b.controller.scope.getSnapshot()).toBe(before)
+  })
+
+  it('starts in the project the runtime itself would land in', () => {
+    // `recentWorkspaceId` is the runtime's own answer to "where were you", and
+    // the one it uses to pick the conversation to restore — so a terminal
+    // started from nothing lands in the same place the rest of the app would.
+    const b = bench({
+      workspaces: workspaceList([{ path: '/repo', sessionIds: [] }, { path: '/other', sessionIds: [] }], 'w1'),
+    })
+    expect(b.controller.ensureScope()).toBe(true)
+    expect(b.controller.scope.getSnapshot()?.cwd).toBe('/other')
+  })
+
+  it('falls back to the sidebar\'s top group when the runtime names none', () => {
+    const b = bench({
+      workspaces: workspaceList([{ path: '/repo', sessionIds: [] }, { path: '/other', sessionIds: [] }]),
+    })
+    expect(b.controller.ensureScope()).toBe(true)
+    expect(b.controller.scope.getSnapshot()?.cwd).toBe('/repo')
+  })
+
+  it('has nothing to derive where no project is registered at all', () => {
+    const b = bench()
+    expect(b.controller.ensureScope()).toBe(false)
+    expect(b.controller.scope.getSnapshot()).toBeUndefined()
+  })
+})
+
+describe('whether pressing Code would go anywhere', () => {
+  it('is offered on a page with nothing open, which is where it used to be dead', () => {
+    const b = bench({ workspaces: workspaceList([{ path: '/repo', sessionIds: [] }]) })
+    expect(b.controller.scope.getSnapshot()).toBeUndefined()
+    expect(b.controller.enterable.getSnapshot()).toBe(true)
+  })
+
+  it('is offered with no project either, because the Host can still be asked', () => {
+    expect(bench().controller.enterable.getSnapshot()).toBe(true)
+  })
+
+  it('stops being offered once the Host proves it cannot be asked', async () => {
+    // The browse backend: the in-app directory browser belongs to ui-workspace,
+    // and a contributed mode has no way to open it. One press finds out, and
+    // the segment says what is missing from then on instead of doing nothing.
+    const b = bench({ pickerFails: 'pick' })
+    await b.controller.chooseProject()
+    expect(b.controller.enterable.getSnapshot()).toBe(false)
+  })
+
+  it('comes back the moment a project is registered', async () => {
+    const b = bench({ pickerFails: 'pick' })
+    await b.controller.chooseProject()
+    expect(b.controller.enterable.getSnapshot()).toBe(false)
+    b.workspaces.set(workspaceList([{ path: '/repo', sessionIds: [] }]))
+    expect(b.controller.enterable.getSnapshot()).toBe(true)
+  })
+
+  it('survives a cancelled picker: cancelling is an answer, not a broken Host', async () => {
+    const b = bench({ picked: null })
+    await b.controller.chooseProject()
+    expect(b.controller.enterable.getSnapshot()).toBe(true)
+  })
+
+  it('survives a directory the Host would not register', async () => {
+    const b = bench({ picked: '/repo', pickerFails: 'register' })
+    await b.controller.chooseProject()
+    expect(b.controller.enterable.getSnapshot()).toBe(true)
+  })
+})
+
+describe('the cold start: pressing Code with no project anywhere', () => {
+  it('asks the Host where, registers the answer, and takes the column', async () => {
+    // The fresh install this mode used to be permanently grey in. There is
+    // nowhere to run and exactly one gesture that changes that — the same one
+    // the frame's own empty state offers.
+    const b = bench({ picked: '/repo' })
+    await b.controller.chooseProject()
+    expect(b.pickDirectory).toHaveBeenCalledTimes(1)
+    expect(b.registerProject).toHaveBeenCalledWith('/repo')
+    // The Host's canon, not the picked string: a workspace is keyed on the
+    // resolved path, and a terminal on the other one is accounted elsewhere.
+    expect(b.controller.scope.getSnapshot()?.cwd).toBe('/repo/canon')
+    expect(b.enterCode).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the column alone when the picker is cancelled', async () => {
+    const b = bench({ picked: null })
+    await b.controller.chooseProject()
+    expect(b.registerProject).not.toHaveBeenCalled()
+    expect(b.controller.scope.getSnapshot()).toBeUndefined()
+    expect(b.enterCode).not.toHaveBeenCalled()
+  })
+
+  it('leaves it alone when the Host has no picker to open', async () => {
+    const b = bench({ pickerFails: 'pick' })
+    await expect(b.controller.chooseProject()).resolves.toBeUndefined()
+    expect(b.controller.scope.getSnapshot()).toBeUndefined()
+    expect(b.enterCode).not.toHaveBeenCalled()
+  })
+
+  it('leaves it alone when the directory cannot be registered', async () => {
+    const b = bench({ picked: '/repo', pickerFails: 'register' })
+    await expect(b.controller.chooseProject()).resolves.toBeUndefined()
+    expect(b.controller.scope.getSnapshot()).toBeUndefined()
+    expect(b.enterCode).not.toHaveBeenCalled()
   })
 })
 

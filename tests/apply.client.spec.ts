@@ -25,6 +25,10 @@ function bench(options: {
   chord?: string
   /** Compose without the mode switch, the way a profile with no omdsh-base does. */
   modes?: false
+  /** What the Host's directory picker answers; null is the cancelled dialog. */
+  picked?: string | null
+  /** A Host whose picker this side cannot open — the browse backend. */
+  pickerFails?: boolean
 } = {}) {
   const current = options.current ?? 's1'
   const sessions = createSnapshotStore<SessionListState>({
@@ -44,6 +48,8 @@ function bench(options: {
     baselinesReady: true, recentWorkspaceId: undefined,
   })
   const opened: string[] = []
+  /** Directories registered as projects, in order — the cold start's one write. */
+  const created: string[] = []
   // The REAL registry, imported from the package that publishes it: a spec
   // driving this plugin through a hand-written double would keep passing after
   // the contract moved out from under it.
@@ -56,7 +62,17 @@ function bench(options: {
         sessions.set({ ...sessions.getSnapshot(), current: sessionId as never })
       },
     },
-    workspaces: { list: workspaces },
+    workspaces: {
+      list: workspaces,
+      pickDirectory: async () => {
+        if (options.pickerFails === true) throw new Error('no picker this side can open')
+        return options.picked ?? null
+      },
+      create: async ({ path }: { path: string }) => {
+        created.push(path)
+        return { workspaceId: 'w-new', path, title: path, sessionIds: [] }
+      },
+    },
     ...options.modes === false ? {} : { sessionModes: modes },
   }
   // Composed only when a case asks for it, which is what makes the absent case
@@ -105,7 +121,9 @@ function bench(options: {
   } as unknown as ClientContext
 
   apply(ctx)
-  return { ctx, modes, registrations, sessions, workspaces, opened, disposers, rebind }
+  /** Let the cold start's two awaited Host calls land. */
+  const settled = async (): Promise<void> => { await Promise.resolve(); await Promise.resolve() }
+  return { ctx, modes, registrations, sessions, workspaces, opened, created, disposers, rebind, settled }
 }
 
 /** The live scope, as the column's injected face publishes it. */
@@ -290,10 +308,72 @@ describe('omdsh-code browser half', () => {
     expect(b.opened).toEqual(['code-session-a'])
   })
 
-  it('goes unavailable while no conversation is current', () => {
+  it('stays live with no conversation open, and the press starts the terminal', () => {
+    // The composition this plugin is the ONLY mode plugin in: nothing selects a
+    // conversation on the way in, so a segment reporting the derived scope was
+    // dead on arrival — with omdsh-justchat beside it a chat is always open and
+    // the case never showed.
     const b = bench()
     b.sessions.set({ ...b.sessions.getSnapshot(), current: undefined })
-    expect(segment(b)?.available).toBe(false)
+    expect(segment(b)?.available).toBe(true)
+
+    b.modes.enter(SEGMENT_ID)
+    expect(segment(b)?.active).toBe(true)
+    const scope = scopeOf(b)
+    expect(scope?.cwd).toBe('/workspace/project')
+    expect(isCodeSessionId(scope?.codeSessionId ?? '')).toBe(true)
+  })
+
+  it('asks the Host where to run when no project is registered at all', async () => {
+    const b = bench({ picked: '/picked/repo' })
+    b.sessions.set({ ...b.sessions.getSnapshot(), current: undefined })
+    b.workspaces.set({ ...b.workspaces.getSnapshot(), items: [] })
+    // Never unavailable: there is always a way to name a directory, so the
+    // press asks rather than the tooltip explaining.
+    expect(segment(b)?.available).toBe(true)
+
+    b.modes.enter(SEGMENT_ID)
+    // Asked and answered off the press, so the column arrives a turn later.
+    expect(b.registrations).toHaveLength(0)
+    await b.settled()
+    expect(b.created).toEqual(['/picked/repo'])
+    expect(segment(b)?.active).toBe(true)
+    expect(scopeOf(b)?.cwd).toBe('/picked/repo')
+  })
+
+  it('leaves the column where it was when nobody picks anything', async () => {
+    const b = bench({ picked: null })
+    b.sessions.set({ ...b.sessions.getSnapshot(), current: undefined })
+    b.workspaces.set({ ...b.workspaces.getSnapshot(), items: [] })
+
+    b.modes.enter(SEGMENT_ID)
+    await b.settled()
+    expect(b.created).toEqual([])
+    expect(segment(b)?.active).toBe(false)
+    expect(b.registrations).toHaveLength(0)
+    // Cancelling is an answer, so the offer stands.
+    expect(segment(b)?.available).toBe(true)
+  })
+
+  it('says what is missing once the Host proves it cannot be asked', async () => {
+    // A Host whose picker is the in-app browser (remote, headless): this side
+    // cannot open it, so after one press the segment stops offering the cold
+    // start and names the thing that would fix it.
+    const b = bench({ pickerFails: true })
+    b.sessions.set({ ...b.sessions.getSnapshot(), current: undefined })
+    const projects = b.workspaces.getSnapshot().items
+    b.workspaces.set({ ...b.workspaces.getSnapshot(), items: [] })
+
+    b.modes.enter(SEGMENT_ID)
+    await b.settled()
+    expect(segment(b)).toMatchObject({
+      available: false,
+      unavailableHint: en['mode.code.unavailable'],
+    })
+
+    // And a project appearing is exactly what fixes it.
+    b.workspaces.set({ ...b.workspaces.getSnapshot(), items: projects })
+    expect(segment(b)?.available).toBe(true)
   })
 
   it('releases the column and the segment on teardown', () => {
