@@ -12,3 +12,13 @@ allowBuilds:
   # extra. The harness itself carries the same package for the same reason
   # (packages/subprocess/subprocess-local).
   node-pty: true
+
+# pnpm holds a freshly published release at arm's length for a day before it
+# will install it. That gate is worth keeping for the rest of the tree, but it
+# cannot apply to the collection this plugin belongs to: omdsh-base is
+# published and consumed within the same afternoon, and every release of it
+# this plugin builds against is younger than the cutoff. Without this the
+# `prepare` install that builds this package from git fails outright — the
+# plugin becomes uninstallable for a day after each omdsh-base release.
+minimumReleaseAgeExclude:
+  - '@omdsh-plugins/*'
