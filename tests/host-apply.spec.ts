@@ -89,10 +89,10 @@ describe('omdsh-code host half', () => {
   })
 
   it('takes the socket, the process hook, and every terminal down with the plugin', () => {
-    // Two effects: the exit hook that stops terminals outliving their host,
-    // and the upgrade route itself.
+    // Three effects: the account sweep, the exit hook that stops terminals
+    // outliving their host, and the upgrade route itself.
     const b = bench()
-    expect(b.disposers).toHaveLength(2)
+    expect(b.disposers).toHaveLength(3)
     expect(() => { for (const dispose of b.disposers) dispose() }).not.toThrow()
   })
 })

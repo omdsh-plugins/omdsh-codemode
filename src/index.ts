@@ -30,7 +30,9 @@ import { bridge } from './terminal-socket.ts'
 import { remoteResolver, type RemoteWorkspaceFace } from './remote.ts'
 import { ProjectionRefolder, type ProjectionCacheFace } from './title-refold.ts'
 import { isTrustedRequest } from './trust-fence.ts'
-import { WorkspaceAccountant, type WorkspaceRegistryFace } from './workspace-account.ts'
+import {
+  WorkspaceAccountant, type ConversationBegun, type WorkspaceRegistryFace,
+} from './workspace-account.ts'
 import { CodeError, messageOf } from './wire.ts'
 
 export {
@@ -50,8 +52,10 @@ export type { RemdevFace, RemoteWorkspaceFace, ResolveRemote } from './remote.ts
 export { readOscTitle } from './osc-title.ts'
 export { ProjectionRefolder, REFOLD_SCHEDULE_MS } from './title-refold.ts'
 export type { ProjectionCacheFace, RefoldClock } from './title-refold.ts'
-export { ATTACH_SCHEDULE_MS, WorkspaceAccountant } from './workspace-account.ts'
-export type { AccountantClock, WorkspaceFace, WorkspaceRegistryFace } from './workspace-account.ts'
+export { ATTACH_SCHEDULE_MS, RECONCILE_SCHEDULE_MS, WorkspaceAccountant } from './workspace-account.ts'
+export type {
+  AccountantClock, ConversationBegun, WorkspaceFace, WorkspaceRegistryFace,
+} from './workspace-account.ts'
 export { CodeError } from './wire.ts'
 
 /** Cordis plugin name. */
@@ -155,7 +159,15 @@ export function apply(ctx: Context, config: Config = {}): void {
       return (sessionId, _cwd, cols, rows) => remote.openAgent({ cols, rows, sessionId })
     },
   )
-  const accountant = new WorkspaceAccountant(workspaceRegistry)
+  const accountant = new WorkspaceAccountant(workspaceRegistry, conversationBegun(projectionCache))
+  // The accounts an earlier build wrote, corrected once per host: see
+  // `reconcileAccounts`. Started here rather than inside the socket effect
+  // because it is about conversations from previous runs, not about any
+  // terminal this one will serve.
+  ctx.effect(() => {
+    accountant.reconcileSoon()
+    return () => { accountant.dispose() }
+  }, 'omdsh-code: unaccount Code conversations that never began')
 
   /**
    * The directory a terminal runs in.
@@ -325,7 +337,6 @@ export function apply(ctx: Context, config: Config = {}): void {
     })
     return () => {
       dispose()
-      accountant.dispose()
       refolder.dispose()
       terminals.disposeAll()
       wss.close()
@@ -334,7 +345,15 @@ export function apply(ctx: Context, config: Config = {}): void {
 }
 
 /**
- * Account for a conversation once its terminal's socket has ended.
+ * Settle a conversation's workspace account once its terminal's socket has
+ * ended.
+ *
+ * Both directions, which is why this runs on the socket ending rather than
+ * only on a terminal exiting: leaving Code mode is the moment the user is
+ * about to be somewhere else, and a conversation nothing was ever said in must
+ * not be left accounted behind them — the frame reuses exactly that for New
+ * Session. A conversation that did begin is attached here, which is also the
+ * fastest its row ever appears.
  *
  * A REMOTE conversation is written on the server, so this host has nothing to
  * account for until the mirror has brought it home — and the mirror runs on a
@@ -355,5 +374,41 @@ async function settle(
   cwd: string,
 ): Promise<void> {
   if (remote !== undefined) await remote.sync().catch(() => 0)
-  await accountant.attachNow(codeSessionId, cwd)
+  await accountant.settleNow(codeSessionId, cwd)
+}
+
+/**
+ * Whether a conversation has begun, as this host can answer it: from the
+ * projection the session list's own `blank` bit is folded from.
+ *
+ * The cache rather than the log, because it is built for this question — a
+ * cold read that folds the stored checkpoint plus the tail after it, never the
+ * whole log — and because agreeing with `session.list` is the entire point:
+ * `blank` is the bit the frame's New Session reuses a conversation on, so an
+ * accounting rule derived from anything else would be a second opinion about
+ * the same word.
+ *
+ * Three outcomes, deliberately (see {@link ConversationBegun}). A conversation
+ * with no persisted log at all is one the terminal has not written yet, and the
+ * cache reports that as a rejection — unanswerable rather than unbegun, since
+ * there is nothing there to account for either way.
+ * @param cache - resolves the projection cache, or undefined without one.
+ * @returns the probe.
+ */
+function conversationBegun(cache: () => ProjectionCacheFace | undefined): ConversationBegun {
+  return async (sessionId: string) => {
+    const projections = cache()
+    if (projections === undefined) return undefined
+    let values: Record<string, unknown>
+    try {
+      values = (await projections.coldSnapshot(sessionId)).values
+    } catch {
+      return undefined
+    }
+    const metadata = values.sessionListMetadata
+    // Absent means the projection is not composed here — a deployment with no
+    // session list to speak of. Nothing to disagree with, so nothing to say.
+    if (metadata === null || typeof metadata !== 'object') return undefined
+    return (metadata as { blank?: unknown }).blank === false
+  }
 }
