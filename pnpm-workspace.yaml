@@ -1,6 +1,10 @@
 # pnpm 10+ blocks any dependency shipping an install/build script until it is
 # explicitly reviewed here.
 allowBuilds:
+  # A transitive dependency of the build toolchain (tsdown/tsx). Its install
+  # script selects the platform esbuild binary used while preparing this git
+  # package; the built plugin does not load esbuild at runtime.
+  esbuild: true
   # node-pty allocates the terminal Code mode's column attaches to. It ships
   # prebuilt binaries for the common platforms and its install script only
   # selects (or, failing that, compiles) one — there is no terminal without
