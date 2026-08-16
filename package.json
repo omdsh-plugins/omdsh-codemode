@@ -1,7 +1,7 @@
 {
   "name": "@omdsh-plugins/omdsh-code",
   "description": "Code mode for the DeepSeek Harness web GUI: a third segment beside Chat and Work whose column is the harness's own terminal, running in the conversation's workspace",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "license": "MIT",
   "repository": {
