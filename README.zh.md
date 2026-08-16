@@ -6,17 +6,17 @@
 
 Web GUI 与终端是同一个 harness 的两道前门。本插件是让其中一道显示在另一道里的那条缝——按下 **Code**，会话列就被一个真正的 `dsh --profile omdsh-tui` 取代（banner 一个不少），并且就在该对话已经归属的那个目录里。
 
-## 它加了什么
+## 它提供什么
 
-| 表层 | 来自哪里 |
+| 界面 | 从哪来 |
 |---|---|
 | 模式开关里的 **Code** 分段 | 向 [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) 发布的分段注册表 `sessionModes` 的一次注册 |
 | 终端列 | `conversation` 的一个条目——ui-layout 中代表整个中列的唯一席位；以低于随包会话的优先级注册，离开该模式时销毁 |
 | 它背后的 socket | `GET /omdsh-code/terminal`（WebSocket 升级），与 `/api` 同样的围栏 |
 | 侧边栏里归入所属工作区的 Code 对话 | 终端写下第一笔之后，对 harness 自己的注册表调用 `Workspace.attachSession` |
-| 这些行前面的红点 | 本插件分段携带的 `tone` 与 `owns` 判别；侧边栏的圆点由 [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) 为所有已注册的模式统一绘制 |
 | **New Session** 起的是另一个终端，而不是离开这个模式 | 本插件分段注册的 `newSession` 应答——开关会先把这个请求交给占着会话列的那一方 |
 | 侧边栏的行跟上终端里 `/rename` 改的名字 | 终端自己宣布的窗口标题，从本插件本来就在转发的字节里读到 |
+| 这些行前面的红点 | 本插件分段携带的 `tone` 与 `owns` 判别；侧边栏的圆点由 [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) 为所有已注册的模式统一绘制 |
 
 **没有改动 harness 的任何东西，也没有重新实现终端的任何东西。** 屏幕上的就是 `@omdsh-plugins/omdsh-tui` 自己的前门——它的 transcript、工具卡片、`/resume`、它绑定的每一个键——因为本插件做的事就是启动那个程序并转发字节。
 
@@ -62,7 +62,7 @@ id 本身就是那份记录——会话存储旁边没有第二张表可以和�
 3. **这个项目最近的那段 Code 对话** —— 这就是在一台刚起来的 host 上按下 Code 该有的意思：回到手上的活，而不是一个空提示符。「最近」用的是侧边栏排序用的同一把尺，并且永远不取一段谁也没说过话的对话——被打开又走开的终端会留下这种空壳，里面没有任何可回去的东西。
 4. **一段新对话**，当这个项目一段都没有时。
 
-这个顺序就是全部的安全性论证，而第三个答案摆在这个位置是刻意的。浏览器看得见会话列表，但看不见一个正在跑的进程。刚开出来的对话在磁盘上还什么都没有，因此谈不上"最近"——一个凌驾于 host 活表之上的界面，就会在一个正在运行的 agent 头上把更旧的一段拉起来，而同一段对话的两份活副本会把各自的序号交织进同一个文件，直到这份日志再也读不出来为止。所以浏览器只**提议**（socket 上的 `resume=`），由 host 决定：只有当它在那个目录里什么都没跑时，才会接下这个提议。
+这个顺序就是全部的安全性论证，而第三个答案摆在这个位置是刻意的。浏览器看得见会话列表，但看不见一个正在跑的进程。刚开出来的对话在磁盘上还什么都没有，因此谈不上"最近"——一个凌驾于 host 活表之上的界面，就会在一个正在运行的 agent 头上把更旧的一段拉起来，而同一段对话的两份活副本会把各自的序号交织进同一个文件，直到这份日志再也读不出来为止。所以浏览器只**提议**（socket 上的 `resume=`），由 host 决定：只有当它在那个目录里什么都没跑时，才会接下这个提议。已经被某次事故弄成这样的日志并非没救：`pnpm run repair:sessions` 就是针对这个形状的修复工具，怎么跑写在[命令](#命令)里。
 
 ## New Session 起的是另一个终端
 
@@ -91,24 +91,48 @@ id 本身就是那份记录——会话存储旁边没有第二张表可以和�
 
 运行时**不是**由 `dsh` 启动的部署（打包过的外壳、测试）改为设置 `command`（以及 `args`）；两者都没有时，socket 会带一条说明去拒绝，而不是去猜某个二进制。
 
+这四个旋钮——`profile`、`command`、`args`、`reconnectGraceMs`——在 host 半边是一个普通的 TypeScript interface，**不是** [settings 命名空间](https://omdsh-plugins.github.io/conventions/#rule-1)。所以它们就在上面那段示例所在的地方改，也就是 profile 自己的 `cordis.patch.yml`，而本插件在插件中心里的卡片没有表单。它们是组装事实，而不是某个人的偏好——一个部署要重新执行哪个启动器，是组装 profile 的那个人一次性定下的。
+
 无论解析出哪一个启动器，调用时都会在末尾追加 **`--session-id <id>`**，因为 Code 模式会给它启动的对话命名。它启动的 profile 必须认识这个 flag：[omdsh-tui](https://github.com/omdsh-plugins/omdsh-tui) 把它当作「这个会话没有就创建、有就继续」，而这正是让一段 Code 对话能被侧边栏收住、能被一次点击重新打开的原因。
+
+## 安全
+
+这个 socket 交出去的是一个活的 agent 进程，因此它与 `/api` 同等围栏：`Host` 头指向我们（回环，或该部署被明确告知要服务的 authority），外加同源浏览器标记。这是针对 DNS 重绑定与跨站的防御，不是身份认证——把 `/api` 发布到网络上的部署，也就把它一起发布了。
 
 ## 安装
 
-需要：已构建的插件、PATH 上的 `dsh`，以及承载模式开关的 web profile：
+需要 PATH 上有 `dsh`，以及承载模式开关的 web profile：
+
+```sh
+dsh plugin --profile web add @omdsh-plugins/omdsh-code
+dsh plugin --profile web add @omdsh-plugins/omdsh-base   # 它注册进去的那个开关
+```
+
+也可以从检出安装，这是尚未发布的构建要走的路。`dsh web` 启动前 `lib/` 必须存在——loader 直接 import `lib/index.js`，而按路径安装的包不会跑 `prepare`，没有任何环节替你构建：
 
 ```sh
 pnpm install
 pnpm run build
 
-dsh plugin --profile web add "$PWD"                        # 本插件
-dsh plugin --profile web add ../omdsh-base                 # 它注册进去的那个开关
-dsh plugin --profile web add ../omdsh-tui/packages/tui \
-                            ../omdsh-tui/packages/tui-app  # 它启动的那个 profile
-dsh web
+dsh plugin --profile web add "$PWD"           # 本插件
+dsh plugin --profile web add ../omdsh-base    # 它注册进去的那个开关
 ```
 
-它启动的终端是另一个 profile（默认 `omdsh-tui`），按[那个仓库](https://github.com/omdsh-plugins/omdsh-tui/blob/HEAD/README.zh.md)的说明安装。Code 模式是启动它，而不是包含它。
+它启动的终端住在**它自己的 profile** 里（默认 `omdsh-tui`），而那一个**只能从检出安装**：与这里点名的其他同伴不同，它不在本集合的 registry 里，所以没有 `@omdsh-plugins/omdsh-tui` 可加。按[那个仓库](https://github.com/omdsh-plugins/omdsh-tui#install)的说明装，那就是一个脚本：
+
+```sh
+cd ../omdsh-tui && pnpm install && pnpm run install:profile
+dsh --profile web
+```
+
+**绝不要把终端加进 `web` profile。** `@omdsh-plugins/omdsh-tui-app` 和 `@deepseek-ai/dsh-web-app` 一样，都是 surface bundle，而一个 profile 在 `dsh-base` 之上只能组合一个 surface。两个叠在一起会在七个 loader id 上撞车——`code-runtime`、`storage`、`storage-json`、`storage-domain`、`session-projection-cache`、`session-stats`、`agent-presets`——整个页面在挂载时就死在第一个上：
+
+```
+Error: dsh: plugin tree failed to load: failed to apply loader entry include
+(cordis:include): duplicate loader entry id: code-runtime
+```
+
+Code 模式是把那个 profile 作为子进程**启动**，而不是组合它。两者从不共用一份层栈。
 
 卸载同理：
 
@@ -118,23 +142,12 @@ dsh plugin --profile web remove @omdsh-plugins/omdsh-code
 
 没有 [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) 时，profile 依然可以组合并启动，本插件的浏览器半边照常挂载、但什么都不做：`sessionModes` 是按服务名解析的，而它下面所有的注册都挂在一个等待该服务的受限 fiber 上。这正是预期的关闭状态——没有开关，第三个分段也就无处出现，Code 模式会让页面保持它进来时的样子。
 
-这个关闭状态**不能**用顶层 `inject` 声明 `sessionModes` 来实现。cordis 对被注入的服务会无限期等待，而 Web 客户端在插件树静默后会扫一遍所有 loader entry，任何仍处于 `pending` 的都会让整个页面失败——于是"Code 模式没开"就变成了 `web boot: 1 entry did not activate`，是一个死掉的界面，而不是少了一个分段。这条规则对任何由别的插件发布的服务都成立，写在 [CONVENTIONS.zh.md](https://github.com/omdsh-plugins/omdsh-plugins/blob/HEAD/CONVENTIONS.zh.md) 里。
+这个关闭状态**不能**用顶层 `inject` 声明 `sessionModes` 来实现。cordis 对被注入的服务会无限期等待，而 Web 客户端在插件树静默后会扫一遍所有 loader entry，任何仍处于 `pending` 的都会让整个页面失败——于是"Code 模式没开"就变成了 `web boot: 1 entry did not activate`，是一个死掉的界面，而不是少了一个分段。这条规则对任何由别的插件发布的服务都成立，写在 [CONVENTIONS.zh.md](https://omdsh-plugins.github.io/conventions/#rule-9) 里。
 
 另外两个同伴插件同样是可选的、以同样的方式取用，各自的关闭状态也都不花什么代价：
 
 - [omdsh-shortcuts](https://github.com/omdsh-plugins/omdsh-shortcuts) 发布 `shortcut`。装了它，**Code** 分段的 tooltip 会写出进入这个模式的快捷键，并且改键之后不用刷新就跟上；没装它，分段一切照旧，只是不去声称一个键——本插件自己不绑定任何键，因为「进入某个模式」本来就有一条公开的接缝，由键位插件来调用。
 - [omdsh-remdev](https://github.com/omdsh-plugins/omdsh-remdev) 发布 `remdev`。装了它，一个代表服务器上某个目录的工作区，它的终端就跑在**那边**——同一段对话、同一个 `--session-id`、另一台机器——而它在那边写下的对话会在终端 socket 结束时立刻拉回本地。没装它，每个目录都只是普通的本地目录，终端就在本机启动，这也正是本插件出厂时的样子。
-
-## 已知限制
-
-- **已经在另一个终端里打开的对话，这里打不开。** 同一份会话日志上两个进程，是 harness 会拒绝的事，而且拒绝得对：点击一个终端仍在别处跑着的 Code 行——应用的另一个窗口，或者某次不干净的 host 退出留下的进程——列里显示的就是那条拒绝。按 **Code** 不受影响（它从不自作主张去恢复某段对话）；结束掉另一个进程（`/quit`，或关掉它的窗口）就能把那一行释放出来。
-- **恢复出来的终端没有回滚历史。** 见上：`dsh --resume` 不会重画 transcript，而本插件是在跑终端自己的前门，不是在重新实现它。
-- **搜索结果不带模式圆点。** 圆点画在浏览用的行上；搜索结果是两行的堆叠，而且它第二行已经写着所属工作区。
-- **被网页视图打开过的对话，名字不再跟着它的终端走。** 点开一个 Code 行会让 Web host 在自己进程里恢复那段会话，从那以后它列出的名字就是从自己那份副本折叠出来的——而终端之后写的东西永远到不了那份副本。此后在终端里改的名字要等下一次刷新页面才出现。没有插件能够触及并退掉那份副本：它属于 host。
-
-## 安全
-
-这个 socket 交出去的是一个活的 agent 进程，因此它与 `/api` 同等围栏：`Host` 头指向我们（回环，或该部署被明确告知要服务的 authority），外加同源浏览器标记。这是针对 DNS 重绑定与跨站的防御，不是身份认证——把 `/api` 发布到网络上的部署，也就把它一起发布了。
 
 ## 命令
 
@@ -145,6 +158,31 @@ pnpm run typecheck  # 源码与测试
 pnpm run test       # 单元测试
 ```
 
-## 这份代码从哪来
+`repair:sessions` 是针对「按下 Code 会看到什么」里描述的那种故障的修复工具——同一段对话的两份活副本把各自的序号交织进了同一份日志。它默认只报告、明确要求时才写入，因为它动的是对话；每一次重写都会把原文件留在旁边，后缀 `.bak`：
+
+```sh
+pnpm run repair:sessions                 # 对 $DSH_HOME（或 ~/.dsh）做一次报告
+pnpm run repair:sessions -- --write      # 实际写入，每份日志留一个 .bak
+pnpm run repair:sessions -- --home /path/to/dsh-home
+```
+
+对着哪个 harness 编译是一个开关：
+
+```sh
+pnpm run harness:npm                             # 提交状态：锁定的已发布版本
+pnpm run harness:local ../../deepseek-harness    # 同级检出，用于开发
+pnpm run check:harness-pin                       # 只要还有 link: 就失败
+```
+
+**只有 registry 状态可以提交。** `link:` 是相对声明它的 manifest 解析的，提交一条就等于把某台机器的目录布局写死进包里——而且 pnpm 不会大声报错：它建出悬空符号链接、报告安装成功，然后构建阶段每个 harness import 都是 `TS2307`。`check:harness-pin` 就是用来在提交前拦住这件事的。
+
+## 它从哪里来
 
 pty 注册表、socket 桥接与浏览器信任围栏改编自 [`omdsh-sidepanel`](https://github.com/omdsh-plugins/omdsh-sidepanel)——它以同样的形状运行一个 shell。这里新的部分是：启动器（一个 harness profile，而不是 `$SHELL`）、键（目录，而不是对话），以及席位（整列，而不是停靠面板）。
+
+## 已知限制
+
+- **已经在另一个终端里打开的对话，这里打不开。** 同一份会话日志上两个进程，是 harness 会拒绝的事，而且拒绝得对：点击一个终端仍在别处跑着的 Code 行——应用的另一个窗口，或者某次不干净的 host 退出留下的进程——列里显示的就是那条拒绝。按 **Code** 不受影响（它从不自作主张去恢复某段对话）；结束掉另一个进程（`/quit`，或关掉它的窗口）就能把那一行释放出来。
+- **恢复出来的终端没有回滚历史。** 见上：`dsh --resume` 不会重画 transcript，而本插件是在跑终端自己的前门，不是在重新实现它。
+- **搜索结果不带模式圆点。** 圆点画在浏览用的行上；搜索结果是两行的堆叠，而且它第二行已经写着所属工作区。
+- **被网页视图打开过的对话，名字不再跟着它的终端走。** 点开一个 Code 行会让 Web host 在自己进程里恢复那段会话，从那以后它列出的名字就是从自己那份副本折叠出来的——而终端之后写的东西永远到不了那份副本。此后在终端里改的名字要等下一次刷新页面才出现。没有插件能够触及并退掉那份副本：它属于 host。

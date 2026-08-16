@@ -62,7 +62,7 @@ Four answers, in the order of how much is actually known:
 3. **The project's most recent Code conversation**, which is what pressing Code means on a host that has just started: come back to the work, not to an empty prompt. The most recent by the same clock the sidebar orders by, and never one nothing was said in — a terminal somebody opened and walked away from leaves one of those behind, and there is nothing in it to come back to.
 4. **A new conversation**, when the project has none.
 
-The order is the whole safety argument, and the third answer sits where it does deliberately. The browser can see the session list; it cannot see a running process. A conversation started a moment ago has nothing on disk to be "most recent", so a surface that outranked the live table would revive an older conversation over a running agent — and two live copies of one conversation interleave their sequence numbers until the log stops loading at all. So the browser **offers** (`resume=` on the socket) and the host decides, taking the offer only when it has nothing running in that directory.
+The order is the whole safety argument, and the third answer sits where it does deliberately. The browser can see the session list; it cannot see a running process. A conversation started a moment ago has nothing on disk to be "most recent", so a surface that outranked the live table would revive an older conversation over a running agent — and two live copies of one conversation interleave their sequence numbers until the log stops loading at all. So the browser **offers** (`resume=` on the socket) and the host decides, taking the offer only when it has nothing running in that directory. A log that some earlier accident already damaged that way is not beyond saving: `pnpm run repair:sessions` is the recovery tool for exactly that shape, and [Commands](#commands) says how to run it.
 
 ## New Session starts another terminal
 
@@ -91,24 +91,48 @@ The launcher is **this runtime's own entry, re-executed**: the process serving t
 
 A deployment whose runtime was **not** started by `dsh` — a packaged shell, a test — sets `command` (and `args`) instead; without either, the socket refuses with a message saying so rather than guessing at a binary.
 
+Those four knobs — `profile`, `command`, `args`, `reconnectGraceMs` — are a plain TypeScript interface on the host half, not a [settings namespace](https://omdsh-plugins.github.io/conventions/?lang=en#rule-1). So they are edited where the sample above puts them, in the profile's own `cordis.patch.yml`, and this plugin's card in the plugin hub carries no form. They are composition facts rather than a person's preferences — which launcher a deployment re-executes is decided once, by whoever assembled the profile.
+
 Whichever launcher is resolved, it is invoked with **`--session-id <id>`** appended, because Code mode names the conversation it starts. The profile it boots must understand that flag: [omdsh-tui](https://github.com/omdsh-plugins/omdsh-tui) takes it as create-or-continue for exactly that session, which is what makes a Code conversation something the sidebar can hold and a click can reopen.
+
+## Security
+
+The socket hands out a live agent process, so it is fenced exactly like `/api`: a `Host` header naming us (loopback, or an authority the deployment was told to serve) plus same-origin browser markers. This is a DNS-rebinding and cross-site defence, not authentication — a deployment that publishes `/api` to a network publishes this with it.
 
 ## Install
 
-Requires a built plugin, a `dsh` on your PATH, and the web profile that carries the mode switch:
+Requires a `dsh` on your PATH, and the web profile that carries the mode switch:
+
+```sh
+dsh plugin --profile web add @omdsh-plugins/omdsh-code
+dsh plugin --profile web add @omdsh-plugins/omdsh-base   # the switch it registers into
+```
+
+Or from a checkout, which is what an unpublished build wants. `lib/` must exist before `dsh web` runs — the loader imports `lib/index.js` directly, and a path-installed package never has its `prepare` run, so nothing builds it for you:
 
 ```sh
 pnpm install
 pnpm run build
 
-dsh plugin --profile web add "$PWD"                        # this plugin
-dsh plugin --profile web add ../omdsh-base                 # the switch it registers into
-dsh plugin --profile web add ../omdsh-tui/packages/tui \
-                            ../omdsh-tui/packages/tui-app  # the profile it boots
-dsh web
+dsh plugin --profile web add "$PWD"           # this plugin
+dsh plugin --profile web add ../omdsh-base    # the switch it registers into
 ```
 
-The terminal it starts is a separate profile (`omdsh-tui` by default), installed the way [that repository](https://github.com/omdsh-plugins/omdsh-tui/blob/HEAD/README.md#installing-it) describes. Code mode boots it; it does not contain it.
+The terminal it starts lives in **its own profile** (`omdsh-tui` by default), and that one is **checkout-only**: unlike every other companion named here it is not in the collection's registry, so there is no `@omdsh-plugins/omdsh-tui` to add. Install it the way [that repository](https://github.com/omdsh-plugins/omdsh-tui#install) describes, which is one script:
+
+```sh
+cd ../omdsh-tui && pnpm install && pnpm run install:profile
+dsh --profile web
+```
+
+**Never add the terminal to the `web` profile.** `@omdsh-plugins/omdsh-tui-app` is a surface bundle, exactly as `@deepseek-ai/dsh-web-app` is, and a profile composes exactly one surface over `dsh-base`. Stacking them collides on seven loader ids — `code-runtime`, `storage`, `storage-json`, `storage-domain`, `session-projection-cache`, `session-stats`, `agent-presets` — and the whole page dies at mount on the first one:
+
+```
+Error: dsh: plugin tree failed to load: failed to apply loader entry include
+(cordis:include): duplicate loader entry id: code-runtime
+```
+
+Code mode **boots** that profile as a child process; it does not compose it. The two never share a layer stack.
 
 Remove it the same way:
 
@@ -118,23 +142,12 @@ dsh plugin --profile web remove @omdsh-plugins/omdsh-code
 
 Without [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) the profile still composes and boots, and this plugin's browser half mounts and does nothing: `sessionModes` is resolved by service name, and every registration below it rides a restricted fiber that waits for it. That is the intended off state — there is no switch for a third segment to appear in, so Code mode leaves the page exactly as it found it.
 
-What that off state must NOT be is a top-level `inject` on `sessionModes`. cordis waits for an injected service forever, and the web client sweeps every loader entry once the tree settles and fails the whole page for any left `pending` — so naming a contributed service there turns "Code mode is off" into `web boot: 1 entry did not activate`, a dead UI rather than a missing segment. The rule generalises to every service another plugin publishes, and is written down in [CONVENTIONS.md](https://github.com/omdsh-plugins/omdsh-plugins/blob/HEAD/CONVENTIONS.md).
+What that off state must NOT be is a top-level `inject` on `sessionModes`. cordis waits for an injected service forever, and the web client sweeps every loader entry once the tree settles and fails the whole page for any left `pending` — so naming a contributed service there turns "Code mode is off" into `web boot: 1 entry did not activate`, a dead UI rather than a missing segment. The rule generalises to every service another plugin publishes, and is written down in [CONVENTIONS.md](https://omdsh-plugins.github.io/conventions/?lang=en#rule-9).
 
 Two further companions are optional in the same way, reached the same way, and each has an off state that costs nothing:
 
 - [omdsh-shortcuts](https://github.com/omdsh-plugins/omdsh-shortcuts) publishes `shortcut`. With it, the **Code** segment's tooltip names the chord that enters this mode and follows a rebinding with no reload. Without it the segment is unchanged and simply claims no key — this plugin binds none of its own, because entering a mode already has a published seam the keybinding layer calls.
 - [omdsh-remdev](https://github.com/omdsh-plugins/omdsh-remdev) publishes `remdev`. With it, a workspace standing in for a directory on a server runs its terminal **there** — same conversation, same `--session-id`, a different machine — and the conversations it writes are pulled home as soon as the terminal's socket ends. Without it every directory is an ordinary local one and the terminal starts here, which is the mode this plugin shipped in.
-
-## Known limitations
-
-- **A conversation open in another terminal cannot be opened here.** Two processes on one session log is a thing the harness refuses, and rightly: clicking a Code row whose terminal is still running elsewhere — another window of the app, or a terminal an unclean host exit left behind — shows that refusal in the column. Pressing **Code** is unaffected (it never revives a conversation on its own), and ending the other process (`/quit`, or closing its window) frees the row.
-- **A restored terminal shows no scrollback.** See above: `dsh --resume` does not redraw a transcript, and this plugin runs the terminal's front door rather than reimplementing it.
-- **Search results carry no mode dot.** The dots are painted on the browsing rows; a search result is a two-line stack that already names its workspace.
-- **A conversation the web view has opened stops following its terminal's name.** Opening a Code row makes the web host resume that session in its own process, and from then on it lists a name folded from its own copy — which the terminal's later writes never reach. Renames made in the terminal after that show up on the next reload. Nothing a plugin can reach retires that copy; it belongs to the host.
-
-## Security
-
-The socket hands out a live agent process, so it is fenced exactly like `/api`: a `Host` header naming us (loopback, or an authority the deployment was told to serve) plus same-origin browser markers. This is a DNS-rebinding and cross-site defence, not authentication — a deployment that publishes `/api` to a network publishes this with it.
 
 ## Commands
 
@@ -145,6 +158,31 @@ pnpm run typecheck  # sources and tests
 pnpm run test       # unit tests
 ```
 
+`repair:sessions` is the recovery tool for the failure "What pressing Code shows you" describes — two live copies of one conversation interleaving their sequence numbers into one log. It reports by default and writes only when told to, because it edits conversations; every rewrite leaves the original beside it as `.bak`:
+
+```sh
+pnpm run repair:sessions                 # report on $DSH_HOME (or ~/.dsh)
+pnpm run repair:sessions -- --write      # apply, keeping a .bak per log
+pnpm run repair:sessions -- --home /path/to/dsh-home
+```
+
+Which harness this package compiles against is a switch:
+
+```sh
+pnpm run harness:npm                             # the committed state: the pinned release
+pnpm run harness:local ../../deepseek-harness    # a sibling checkout, for development
+pnpm run check:harness-pin                       # fails while any dependency is linked
+```
+
+**Only the registry state may be committed.** A `link:` specifier is resolved against the manifest that declares it, so a committed one bakes one machine's directory layout into the package — and pnpm does not fail loudly when it is wrong: it creates a dangling symlink, reports a successful install, and the build dies later with `TS2307` on every harness import. `check:harness-pin` exists to catch that before a commit.
+
 ## Where this came from
 
 The pty registry, the socket bridge, and the browser-trust fence are adapted from [`omdsh-sidepanel`](https://github.com/omdsh-plugins/omdsh-sidepanel), which runs a shell in the same shape. What is new here is the launcher (a harness profile rather than `$SHELL`), the key (a directory rather than a conversation), and the seat (the whole column rather than a docked panel).
+
+## Known limitations
+
+- **A conversation open in another terminal cannot be opened here.** Two processes on one session log is a thing the harness refuses, and rightly: clicking a Code row whose terminal is still running elsewhere — another window of the app, or a terminal an unclean host exit left behind — shows that refusal in the column. Pressing **Code** is unaffected (it never revives a conversation on its own), and ending the other process (`/quit`, or closing its window) frees the row.
+- **A restored terminal shows no scrollback.** See above: `dsh --resume` does not redraw a transcript, and this plugin runs the terminal's front door rather than reimplementing it.
+- **Search results carry no mode dot.** The dots are painted on the browsing rows; a search result is a two-line stack that already names its workspace.
+- **A conversation the web view has opened stops following its terminal's name.** Opening a Code row makes the web host resume that session in its own process, and from then on it lists a name folded from its own copy — which the terminal's later writes never reach. Renames made in the terminal after that show up on the next reload. Nothing a plugin can reach retires that copy; it belongs to the host.
