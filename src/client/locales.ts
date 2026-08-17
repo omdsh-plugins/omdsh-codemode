@@ -1,4 +1,4 @@
-/** `omdsh-code` namespace dictionaries. */
+/** `omdsh-codemode` namespace dictionaries. */
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
@@ -11,7 +11,7 @@ export const zh = {
   'surface.noWorkspace': '这个会话还没有工作目录',
 } satisfies Record<string, string>
 
-/** The omdsh-code namespace key union. */
+/** The omdsh-codemode namespace key union. */
 export type CodeKey = keyof typeof zh
 
 /** English dictionary, checked complete against the zh key set. */

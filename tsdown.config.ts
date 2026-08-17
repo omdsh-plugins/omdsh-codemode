@@ -23,7 +23,7 @@ import type { UserConfig } from 'tsdown'
 import { transform } from 'lightningcss'
 
 /** This bundle's id: the package name, and the module-table key the shell fetches it under. */
-const ID = '@omdsh-plugins/omdsh-code'
+const ID = '@omdsh-plugins/omdsh-codemode'
 
 /**
  * The specifiers the shell seeds into the frozen module table. Mirrors

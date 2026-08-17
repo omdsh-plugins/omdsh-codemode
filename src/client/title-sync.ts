@@ -22,7 +22,7 @@
  * attempts widen, and each one first checks whether the list already moved —
  * so the ordinary rename costs one or two reads and a session that never
  * settles costs a bounded few.
- * @module @omdsh-plugins/omdsh-code/src/client/title-sync
+ * @module @omdsh-plugins/omdsh-codemode/src/client/title-sync
  */
 
 /**

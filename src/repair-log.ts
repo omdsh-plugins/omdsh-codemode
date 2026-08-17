@@ -22,7 +22,7 @@
  *
  * Nothing is renumbered and nothing is invented: every line this keeps is a
  * line the original file had, at the seq it had.
- * @module @omdsh-plugins/omdsh-code/src/repair-log
+ * @module @omdsh-plugins/omdsh-codemode/src/repair-log
  */
 
 /** Chunk rows are one line that stands for several events. */

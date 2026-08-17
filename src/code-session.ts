@@ -24,7 +24,7 @@
  *
  * Node-free, like [shared](./shared.ts): the browser half imports this module
  * for real.
- * @module @omdsh-plugins/omdsh-code/src/code-session
+ * @module @omdsh-plugins/omdsh-codemode/src/code-session
  */
 
 /**

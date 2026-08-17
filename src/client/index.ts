@@ -28,7 +28,7 @@
  * client sweeps every entry once the tree settles and fails the whole page for
  * any that is not ACTIVE. A fiber started inside `apply` is not a loader entry,
  * so waiting forever costs nothing. Off has to mean inert, never fatal.
- * @module @omdsh-plugins/omdsh-code/client
+ * @module @omdsh-plugins/omdsh-codemode/client
  */
 
 import { createElement } from 'react'
@@ -63,12 +63,12 @@ export { CODE_SESSION_PREFIX, isCodeSessionId, mintCodeSessionId } from '../code
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** The Code segment and its column's copy. */
-    'omdsh-code': CodeKey
+    'omdsh-codemode': CodeKey
   }
 }
 
 /** Dictionary namespace owned by this plugin. */
-const NS = 'omdsh-code'
+const NS = 'omdsh-codemode'
 
 /** The segment id this plugin contributes. */
 export const SEGMENT_ID = 'code'
@@ -131,7 +131,7 @@ export function apply(ctx: ClientContext): void {
  * @param modes - the resolved segment registry.
  */
 function mountMode(ctx: ClientContext, modes: SessionModes): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'omdsh-code: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'omdsh-codemode: dictionaries')
 
   const sessions = ctx.get('sessions') as unknown as ISessions
   const workspaces = ctx.get('workspaces') as unknown as IWorkspaces
@@ -158,7 +158,7 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
     // a second one, so pressing Code twice on the same answer is idempotent.
     registerProject: async (path: string) => (await workspaces.create({ path })).path,
   })
-  ctx.effect(() => controller.start(), 'omdsh-code: derived terminal scope')
+  ctx.effect(() => controller.start(), 'omdsh-codemode: derived terminal scope')
 
   // Opening a Code conversation shows its terminal — and nothing else. It is
   // NOT handed to the web runtime, because a selected conversation is one this
@@ -185,7 +185,7 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
       if (owned) service.open = shipped
       else delete (service as Partial<typeof service>).open
     }
-  }, 'omdsh-code: a terminal conversation is shown, never selected')
+  }, 'omdsh-codemode: a terminal conversation is shown, never selected')
 
   // A conversation renamed inside a terminal — `/rename`, or the name the
   // agent generates after the first turn — is a durable change this page never
@@ -197,7 +197,7 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
     listedTitle: sessionId => sessions.list.getSnapshot().byId[sessionId as SessionId]?.title,
     refresh: refreshSessions,
   })
-  ctx.effect(() => () => { titles.dispose() }, 'omdsh-code: terminal title sync')
+  ctx.effect(() => () => { titles.dispose() }, 'omdsh-codemode: terminal title sync')
 
   const t = ctx.locale.bind(NS)
   /**
@@ -250,7 +250,7 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
     // with the SCOPE — derived from the selected conversation, and so empty on a
     // page that has never opened one. That made Code permanently grey in the one
     // composition where this plugin is the only mode plugin: a fresh install
-    // with `omdsh-base` alone selects nothing, where `omdsh-justchat`'s managed
+    // with `omdsh-base` alone selects nothing, where `omdsh-chatmode`'s managed
     // Chat workspace always has something open. What a terminal needs is a
     // DIRECTORY, and a conversation is only one of the ways to name one.
     available: controller.enterable.getSnapshot(),
@@ -275,15 +275,15 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
     // directory it cannot resolve is declined rather than guessed at, and the
     // frame's own New Session runs instead.
     newSession: (workspaceId?: string) => controller.startNewConversation(workspaceId),
-  }), 'omdsh-code: mode segment')
+  }), 'omdsh-codemode: mode segment')
 
   // Nowhere to run, and no way left to ask where — see `enterable`.
   const followAvailability = (): void => {
     modes.update(SEGMENT_ID, { available: controller.enterable.getSnapshot() })
   }
-  ctx.effect(() => controller.enterable.subscribe(followAvailability), 'omdsh-code: segment availability')
+  ctx.effect(() => controller.enterable.subscribe(followAvailability), 'omdsh-codemode: segment availability')
 
-  ctx.effect(() => ctx.on('locale/change', () => { applyCopy() }), 'omdsh-code: segment copy')
+  ctx.effect(() => ctx.on('locale/change', () => { applyCopy() }), 'omdsh-codemode: segment copy')
 
   // The chord this segment teaches. A RESTRICTED fiber: a composition with no
   // keybinding layer has no chord to name, and the switch is still the whole
@@ -305,7 +305,7 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
       // Back to naming no key when the layer unloads, rather than teaching one
       // that no longer exists.
       return () => { off(); chord = undefined; applyCopy() }
-    }, 'omdsh-code: follow the mode chord')
+    }, 'omdsh-codemode: follow the mode chord')
   })
 
   // The column, mounted and unmounted by the segment's own active flag. The
@@ -347,5 +347,5 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
       unsubscribe()
       releaseColumn()
     }
-  }, 'omdsh-code: conversation column')
+  }, 'omdsh-codemode: conversation column')
 }

@@ -23,7 +23,7 @@
  *
  * Run: `pnpm run harness:local ../../deepseek-harness`, `pnpm run
  * harness:npm`, or `pnpm run check:harness-pin`.
- * @module @omdsh-plugins/omdsh-code/scripts/harness-source
+ * @module @omdsh-plugins/omdsh-codemode/scripts/harness-source
  */
 
 import { readFile, writeFile } from 'node:fs/promises'

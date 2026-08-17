@@ -3,7 +3,7 @@
  * replay, then relay in both directions until either end goes away. The frame
  * format lives in [shared](./shared.ts), because the browser half must produce
  * exactly what this module parses.
- * @module @omdsh-plugins/omdsh-code/src/terminal-socket
+ * @module @omdsh-plugins/omdsh-codemode/src/terminal-socket
  */
 
 import type { WebSocket } from 'ws'

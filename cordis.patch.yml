@@ -1,12 +1,12 @@
-# The omdsh-code bundle patch: one row, inserted over whatever the profile
+# The omdsh-codemode bundle patch: one row, inserted over whatever the profile
 # already composed.
 #
 # This package is a PROFILE LAYER, not a harness edit. `dsh plugin --profile
-# web add @omdsh-plugins/omdsh-code` installs it into the profile directory and
-# appends it to `dsh.profile.bundles`, so this file is applied after
-# `@deepseek-ai/dsh-base`, `@deepseek-ai/dsh-web-app`, and (where it is
-# installed) `@omdsh-plugins/omdsh-base` — the harness tree stays exactly as it
-# shipped, and removing the plugin removes the row with it.
+# web add @omdsh-plugins/omdsh-codemode` installs it into the profile
+# directory and appends it to `dsh.profile.bundles`, so this file is applied
+# after `@deepseek-ai/dsh-base`, `@deepseek-ai/dsh-web-app`, and (where it is
+# installed) `@omdsh-plugins/omdsh-base` — the harness tree stays exactly as
+# it shipped, and removing the plugin removes the row with it.
 #
 # The row is dual-face, the ordinary `dsh.client` shape:
 #
@@ -30,5 +30,5 @@
 # plugin publishes makes a missing companion fatal to the entire UI.
 
 - insert:
-    - id: code-mode
-      name: '@omdsh-plugins/omdsh-code'
+    - id: codemode
+      name: '@omdsh-plugins/omdsh-codemode'

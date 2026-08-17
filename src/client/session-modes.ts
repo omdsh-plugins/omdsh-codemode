@@ -12,7 +12,7 @@
  * What is NOT imported is the service name. `SESSION_MODES` is a literal here
  * and a literal there, because cordis binds services by name at runtime: the
  * string is a wire word the two packages share, not a symbol one owns.
- * @module @omdsh-plugins/omdsh-code/src/client/session-modes
+ * @module @omdsh-plugins/omdsh-codemode/src/client/session-modes
  */
 
 export type {

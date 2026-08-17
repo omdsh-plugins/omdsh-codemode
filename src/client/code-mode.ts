@@ -27,7 +27,7 @@
  *    This is where the mode was dead before. Its availability was the scope's,
  *    the scope is derived from the selection, and nothing selects a
  *    conversation on a fresh install — a case invisible for as long as
- *    `omdsh-justchat` was composed beside it, because its managed Chat
+ *    `omdsh-chatmode` was composed beside it, because its managed Chat
  *    workspace means a conversation is always open.
  * 5. **Who pressed Code?** Opening a Code conversation IS pressing Code:
  *    clicking that row anywhere — the sidebar, search, the flat list — means
@@ -46,7 +46,7 @@
  *
  * A stored "current mode" would answer none of these better and would
  * eventually disagree with the sidebar. Nothing here is written down.
- * @module @omdsh-plugins/omdsh-code/src/client/code-mode
+ * @module @omdsh-plugins/omdsh-codemode/src/client/code-mode
  */
 
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'

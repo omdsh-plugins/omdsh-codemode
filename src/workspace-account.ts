@@ -44,7 +44,7 @@
  * begun, which is why the schedule is a handful of widening attempts rather
  * than one call, why coming back to a terminal re-arms it, and why giving up
  * is silent — the surface asks again every time its socket ends.
- * @module @omdsh-plugins/omdsh-code/src/workspace-account
+ * @module @omdsh-plugins/omdsh-codemode/src/workspace-account
  */
 
 import { isCodeSessionId } from './code-session.ts'

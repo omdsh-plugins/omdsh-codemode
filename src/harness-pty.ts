@@ -30,7 +30,7 @@
  * actually drives — and is handed a SPAWNER that decides. Everything above (the
  * naming rules, the transcript, the title scan, the reconnect grace) is about a
  * conversation rather than a machine, and none of it wanted to know.
- * @module @omdsh-plugins/omdsh-code/src/harness-pty
+ * @module @omdsh-plugins/omdsh-codemode/src/harness-pty
  */
 
 import { chmodSync, existsSync } from 'node:fs'

@@ -1,12 +1,12 @@
 {
-  "name": "@omdsh-plugins/omdsh-code",
+  "name": "@omdsh-plugins/omdsh-codemode",
   "description": "Code mode for the DeepSeek Harness web GUI: a third segment beside Chat and Work whose column is the harness's own terminal, running in the conversation's workspace",
   "version": "0.1.2",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/omdsh-plugins/omdsh-code.git"
+    "url": "git+https://github.com/omdsh-plugins/omdsh-codemode.git"
   },
   "packageManager": "pnpm@11.7.0",
   "engines": {
@@ -52,7 +52,7 @@
         "zh": "在对话所属的工作区里开一个 harness 终端，与 Chat、Work 并列。"
       },
       "category": "workspace",
-      "docs": "https://github.com/omdsh-plugins/omdsh-code#readme",
+      "docs": "https://github.com/omdsh-plugins/omdsh-codemode#readme",
       "order": 40
     }
   },

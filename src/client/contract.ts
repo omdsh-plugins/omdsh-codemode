@@ -7,7 +7,7 @@
  * the column IS the harness terminal. The registration is added when the mode
  * is entered and disposed when it is left, so the conversation comes back
  * untouched.
- * @module @omdsh-plugins/omdsh-code/src/client/contract
+ * @module @omdsh-plugins/omdsh-codemode/src/client/contract
  */
 
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -45,4 +45,4 @@ export interface CodeColumnInjected {
 export type CodeColumnProps =
   PropsRuntime<'conversation'>
   & InjectFace<CodeColumnInjected>
-  & PropsLocale<'omdsh-code'>
+  & PropsLocale<'omdsh-codemode'>

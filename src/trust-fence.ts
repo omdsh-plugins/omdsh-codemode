@@ -11,7 +11,7 @@
  * same-origin browser markers. This is a DNS-rebinding and cross-site
  * defense, not authentication — a deployment that publishes `/api` to a
  * network publishes these with it.
- * @module @omdsh-plugins/omdsh-code/src/trust-fence
+ * @module @omdsh-plugins/omdsh-codemode/src/trust-fence
  */
 
 import type { IncomingHttpHeaders } from 'node:http'

@@ -11,7 +11,7 @@
  * The socket is fenced exactly like `/api`: a Host header naming us plus
  * same-origin browser markers. A route that hands out a live agent process
  * must be no more reachable than the API that drives one.
- * @module @omdsh-plugins/omdsh-code
+ * @module @omdsh-plugins/omdsh-codemode
  */
 
 import type { IncomingMessage } from 'node:http'
@@ -59,7 +59,7 @@ export type {
 export { CodeError } from './wire.ts'
 
 /** Cordis plugin name. */
-export const name = 'omdsh-code'
+export const name = 'omdsh-codemode'
 
 /**
  * Services required before the socket can mount: the HTTP carrier, the
@@ -167,7 +167,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   ctx.effect(() => {
     accountant.reconcileSoon()
     return () => { accountant.dispose() }
-  }, 'omdsh-code: unaccount Code conversations that never began')
+  }, 'omdsh-codemode: unaccount Code conversations that never began')
 
   /**
    * The directory a terminal runs in.
@@ -260,7 +260,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     const reap = (): void => { terminals.disposeAll() }
     process.once('exit', reap)
     return () => { process.off('exit', reap) }
-  }, 'omdsh-code: terminals do not outlive the host')
+  }, 'omdsh-codemode: terminals do not outlive the host')
 
   ctx.effect(() => {
     // `noServer` because the carrier owns the listener; this only completes
@@ -273,7 +273,7 @@ export function apply(ctx: Context, config: Config = {}): void {
           socket.destroy()
           return
         }
-        const query = new URL(req.url ?? '/', 'http://omdsh-code.invalid').searchParams
+        const query = new URL(req.url ?? '/', 'http://omdsh-codemode.invalid').searchParams
         const sessionId = query.get('session')
         if (sessionId === null || sessionId === '') {
           socket.destroy()
@@ -341,7 +341,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       terminals.disposeAll()
       wss.close()
     }
-  }, 'omdsh-code: harness terminal socket')
+  }, 'omdsh-codemode: harness terminal socket')
 }
 
 /**

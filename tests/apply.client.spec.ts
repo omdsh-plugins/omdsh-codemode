@@ -138,7 +138,7 @@ function scopeOf(b: ReturnType<typeof bench>, index = 0): Scope | undefined {
 const segment = (b: ReturnType<typeof bench>): ModeSegment | undefined =>
   b.modes.store.getSnapshot().find(entry => entry.id === SEGMENT_ID)
 
-describe('omdsh-code browser half', () => {
+describe('omdsh-codemode browser half', () => {
   it('requires only services the web app itself composes, so this entry always activates', () => {
     // `sessionModes` is NOT here on purpose. cordis waits for an injected
     // service forever, and the client boot fails the whole page for a loader
@@ -311,7 +311,7 @@ describe('omdsh-code browser half', () => {
   it('stays live with no conversation open, and the press starts the terminal', () => {
     // The composition this plugin is the ONLY mode plugin in: nothing selects a
     // conversation on the way in, so a segment reporting the derived scope was
-    // dead on arrival — with omdsh-justchat beside it a chat is always open and
+    // dead on arrival — with omdsh-chatmode beside it a chat is always open and
     // the case never showed.
     const b = bench()
     b.sessions.set({ ...b.sessions.getSnapshot(), current: undefined })

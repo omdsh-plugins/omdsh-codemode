@@ -13,7 +13,7 @@
  * See [repair-log](../src/repair-log.ts) for what "repair" means here: drop
  * the lines whose seq the file had already used, and stop at the first hole
  * that remains. Nothing is renumbered and nothing is invented.
- * @module @omdsh-plugins/omdsh-code/scripts/repair-session-logs
+ * @module @omdsh-plugins/omdsh-codemode/scripts/repair-session-logs
  */
 
 import { readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'

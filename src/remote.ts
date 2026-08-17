@@ -23,7 +23,7 @@
  * host named. That is what lets the session mirror bring it home under an id
  * the sidebar can click, and what lets clicking it start the remote launcher on
  * the very conversation the row is showing.
- * @module @omdsh-plugins/omdsh-code/src/remote
+ * @module @omdsh-plugins/omdsh-codemode/src/remote
  */
 
 import type { PtyLike } from './harness-pty.ts'

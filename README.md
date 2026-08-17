@@ -1,4 +1,4 @@
-# omdsh-code
+# omdsh-codemode
 
 English | [中文](README.zh.md)
 
@@ -12,7 +12,7 @@ The web GUI and the terminal are two front doors onto the same harness. This plu
 |---|---|
 | The **Code** segment in the mode switch | A registration in `sessionModes`, the segment registry [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) publishes |
 | The terminal column | An entry in `conversation`, ui-layout's single seat for the whole centre, registered at a lower priority than the shipped conversation and disposed when the mode is left |
-| The socket behind it | `GET /omdsh-code/terminal` (WebSocket upgrade), fenced exactly like `/api` |
+| The socket behind it | `GET /omdsh-codemode/terminal` (WebSocket upgrade), fenced exactly like `/api` |
 | Code conversations in the sidebar, under the workspace they ran in | `Workspace.attachSession` on the harness's own registry, once the terminal has written something |
 | **New Session** starting another terminal instead of leaving the mode | The `newSession` answer this plugin's segment registers, which the switch offers to whoever holds the column |
 | Sidebar rows following a `/rename` made inside the terminal | The window title the terminal announces, read off the bytes this plugin already relays |
@@ -63,7 +63,7 @@ A terminal needs a **directory**, and a conversation is only one of the ways to 
 2. **The project the runtime itself would land in**, when nothing is open. `recentWorkspaceId` is the harness's own answer to "where were you", and the one it restores a conversation from; the top of the workspace list stands in when it names none.
 3. **Wherever you say**, when no project is registered at all. Pressing **Code** on a fresh install opens the Host's directory picker, registers what you choose, and starts a terminal there — the same gesture the frame's own empty state offers under *Choose workspace*.
 
-The second and third answers are why this segment is live on a page that has nothing open. It used to report the first one only, which meant it was permanently greyed out on a fresh install — a state invisible for as long as [omdsh-justchat](https://github.com/omdsh-plugins/omdsh-justchat) was composed beside it, because its managed Chat workspace means a conversation is always open. Both happen on the **press** and never while deriving, so a page nobody pressed Code on starts no terminal and mints no conversation.
+The second and third answers are why this segment is live on a page that has nothing open. It used to report the first one only, which meant it was permanently greyed out on a fresh install — a state invisible for as long as [omdsh-chatmode](https://github.com/omdsh-plugins/omdsh-chatmode) was composed beside it, because its managed Chat workspace means a conversation is always open. Both happen on the **press** and never while deriving, so a page nobody pressed Code on starts no terminal and mints no conversation.
 
 The third answer needs the Host's *native* picker, which is what `dsh` mounts on macOS and Windows when it is serving the machine it runs on. A remote or headless Host drives an in-app directory browser instead — ui-workspace's own component, which a contributed mode has no way to open. There is no way to ask which is mounted, so the first press that finds out is what makes the segment stop offering the cold start and say what is missing instead; registering any project brings it straight back.
 
@@ -97,7 +97,7 @@ The launcher is **this runtime's own entry, re-executed**: the process serving t
 
 ```yaml
 # The profile's own cordis.patch.yml, to change any of it:
-- id: code-mode
+- id: codemode
   config:
     profile: omdsh-tui       # the profile the column boots
     reconnectGraceMs: 300000  # how long a dropped terminal survives
@@ -118,7 +118,7 @@ The socket hands out a live agent process, so it is fenced exactly like `/api`: 
 Requires a `dsh` on your PATH, and the web profile that carries the mode switch:
 
 ```sh
-dsh plugin --profile web add @omdsh-plugins/omdsh-code
+dsh plugin --profile web add @omdsh-plugins/omdsh-codemode
 dsh plugin --profile web add @omdsh-plugins/omdsh-base   # the switch it registers into
 ```
 
@@ -151,7 +151,7 @@ Code mode **boots** that profile as a child process; it does not compose it. The
 Remove it the same way:
 
 ```sh
-dsh plugin --profile web remove @omdsh-plugins/omdsh-code
+dsh plugin --profile web remove @omdsh-plugins/omdsh-codemode
 ```
 
 Without [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) the profile still composes and boots, and this plugin's browser half mounts and does nothing: `sessionModes` is resolved by service name, and every registration below it rides a restricted fiber that waits for it. That is the intended off state — there is no switch for a third segment to appear in, so Code mode leaves the page exactly as it found it.

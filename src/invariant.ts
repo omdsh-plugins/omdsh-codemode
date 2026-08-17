@@ -1,15 +1,15 @@
 /**
- * Package-owned invariant companion for `@omdsh-plugins/omdsh-code`.
- * @module @omdsh-plugins/omdsh-code/invariant
+ * Package-owned invariant companion for `@omdsh-plugins/omdsh-codemode`.
+ * @module @omdsh-plugins/omdsh-codemode/invariant
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@omdsh-plugins/omdsh-code'
+const PACKAGE_NAME = '@omdsh-plugins/omdsh-codemode'
 
 /** Cordis companion plugin name. */
-export const name = 'omdsh-code-invariant'
+export const name = 'omdsh-codemode-invariant'
 /** Service required before the companion can reserve package ownership. */
 export const inject = ['invariants']
 

@@ -56,6 +56,6 @@ describe('host notices', () => {
 
 describe('routes', () => {
   it('keeps every path under one prefix', () => {
-    expect(TERMINAL_PATH.startsWith('/omdsh-code/')).toBe(true)
+    expect(TERMINAL_PATH.startsWith('/omdsh-codemode/')).toBe(true)
   })
 })

@@ -1,4 +1,4 @@
-# omdsh-code
+# omdsh-codemode
 
 [English](README.md) | 中文
 
@@ -12,7 +12,7 @@ Web GUI 与终端是同一个 harness 的两道前门。本插件是让其中一
 |---|---|
 | 模式开关里的 **Code** 分段 | 向 [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) 发布的分段注册表 `sessionModes` 的一次注册 |
 | 终端列 | `conversation` 的一个条目——ui-layout 中代表整个中列的唯一席位；以低于随包会话的优先级注册，离开该模式时销毁 |
-| 它背后的 socket | `GET /omdsh-code/terminal`（WebSocket 升级），与 `/api` 同样的围栏 |
+| 它背后的 socket | `GET /omdsh-codemode/terminal`（WebSocket 升级），与 `/api` 同样的围栏 |
 | 侧边栏里归入所属工作区的 Code 对话 | 终端写下第一笔之后，对 harness 自己的注册表调用 `Workspace.attachSession` |
 | **New Session** 起的是另一个终端，而不是离开这个模式 | 本插件分段注册的 `newSession` 应答——开关会先把这个请求交给占着会话列的那一方 |
 | 侧边栏的行跟上终端里 `/rename` 改的名字 | 终端自己宣布的窗口标题，从本插件本来就在转发的字节里读到 |
@@ -63,7 +63,7 @@ id 本身就是那份记录——会话存储旁边没有第二张表可以和�
 2. **运行时自己会落到的那个项目**，当什么都没打开时。`recentWorkspaceId` 就是 harness 对"你上次在哪"的回答，也是它恢复对话时用的那一个；它没有指名时，退到工作区列表的最上面一项。
 3. **你说哪里就是哪里**，当一个项目都还没注册时。在全新安装上按下 **Code**，会打开 Host 自己的目录选择器，把你选中的目录注册成项目，然后在那里起一个终端 —— 这正是主界面空状态下*选择工作区*的同一个动作。
 
-第二和第三个答案，就是这个 segment 在"什么都没打开"的页面上依然可按的原因。它以前只报第一个答案，于是在全新安装上永远是灰的 —— 而只要 [omdsh-justchat](https://github.com/omdsh-plugins/omdsh-justchat) 装在旁边，这个状态就看不见，因为它托管的 Chat 工作区意味着永远有一段对话开着。两个答案都发生在**按下**的那一刻，推导过程里一个都不做：没人按过 Code 的页面，不会起终端，也不会铸出对话 id。
+第二和第三个答案，就是这个 segment 在"什么都没打开"的页面上依然可按的原因。它以前只报第一个答案，于是在全新安装上永远是灰的 —— 而只要 [omdsh-chatmode](https://github.com/omdsh-plugins/omdsh-chatmode) 装在旁边，这个状态就看不见，因为它托管的 Chat 工作区意味着永远有一段对话开着。两个答案都发生在**按下**的那一刻，推导过程里一个都不做：没人按过 Code 的页面，不会起终端，也不会铸出对话 id。
 
 第三个答案需要 Host 的*原生*选择器，也就是 `dsh` 在 macOS 和 Windows 上服务本机时挂载的那一个。远程或无头的 Host 挂的是应用内的目录浏览器 —— 那是 ui-workspace 自己的组件，外部贡献的 mode 没有办法打开它。没有办法事先问出挂的是哪一个，所以第一次按下就是发现这件事的时刻：从那以后这个 segment 不再提供冷启动，而是直接说清缺的是什么；只要注册了任何一个项目，它立刻回来。
 
@@ -97,7 +97,7 @@ id 本身就是那份记录——会话存储旁边没有第二张表可以和�
 
 ```yaml
 # 要改这些，写在 profile 自己的 cordis.patch.yml 里：
-- id: code-mode
+- id: codemode
   config:
     profile: omdsh-tui        # 这一列启动的 profile
     reconnectGraceMs: 300000  # 断开的终端保留多久
@@ -118,7 +118,7 @@ id 本身就是那份记录——会话存储旁边没有第二张表可以和�
 需要 PATH 上有 `dsh`，以及承载模式开关的 web profile：
 
 ```sh
-dsh plugin --profile web add @omdsh-plugins/omdsh-code
+dsh plugin --profile web add @omdsh-plugins/omdsh-codemode
 dsh plugin --profile web add @omdsh-plugins/omdsh-base   # 它注册进去的那个开关
 ```
 
@@ -151,7 +151,7 @@ Code 模式是把那个 profile 作为子进程**启动**，而不是组合它�
 卸载同理：
 
 ```sh
-dsh plugin --profile web remove @omdsh-plugins/omdsh-code
+dsh plugin --profile web remove @omdsh-plugins/omdsh-codemode
 ```
 
 没有 [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) 时，profile 依然可以组合并启动，本插件的浏览器半边照常挂载、但什么都不做：`sessionModes` 是按服务名解析的，而它下面所有的注册都挂在一个等待该服务的受限 fiber 上。这正是预期的关闭状态——没有开关，第三个分段也就无处出现，Code 模式会让页面保持它进来时的样子。

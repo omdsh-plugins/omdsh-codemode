@@ -22,7 +22,7 @@
  * next turn boundary — so a read fired the instant the title is announced can
  * legitimately still see the old name. The attempts widen, stop as soon as the
  * folded name moves, and are a bounded few either way.
- * @module @omdsh-plugins/omdsh-code/src/title-refold
+ * @module @omdsh-plugins/omdsh-codemode/src/title-refold
  */
 
 /**

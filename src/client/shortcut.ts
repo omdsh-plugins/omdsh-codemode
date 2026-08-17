@@ -11,7 +11,7 @@
  * Structural mirror rather than an import, for the reason `session-modes.ts`
  * mirrors the registry: cordis binds services by name at runtime, and a
  * cross-plugin value import is a client-bundle purity error.
- * @module @omdsh-plugins/omdsh-code/src/client/shortcut
+ * @module @omdsh-plugins/omdsh-codemode/src/client/shortcut
  */
 
 /** Service name the switchboard is published under in the browser. */

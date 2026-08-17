@@ -13,7 +13,7 @@
  * stays the authority on what.
  *
  * Node-free, like [shared](./shared.ts).
- * @module @omdsh-plugins/omdsh-code/src/osc-title
+ * @module @omdsh-plugins/omdsh-codemode/src/osc-title
  */
 
 /** Introduces an escape sequence. */

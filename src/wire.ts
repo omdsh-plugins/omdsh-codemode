@@ -2,7 +2,7 @@
  * What this plugin's host half refuses with. One error class carrying a
  * machine code, so the browser half can tell "start it again" from "stop
  * retrying and read this".
- * @module @omdsh-plugins/omdsh-code/src/wire
+ * @module @omdsh-plugins/omdsh-codemode/src/wire
  */
 
 /** Machine-routable failure kinds the browser half branches on. */

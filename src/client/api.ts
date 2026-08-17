@@ -19,7 +19,7 @@
  * running here. It is what makes pressing Code after a restart come back to
  * the project's most recent conversation instead of an empty prompt, and it
  * loses to a live terminal precisely because the browser cannot see one.
- * @module @omdsh-plugins/omdsh-code/src/client/api
+ * @module @omdsh-plugins/omdsh-codemode/src/client/api
  */
 
 import { TERMINAL_PATH } from '../shared.ts'

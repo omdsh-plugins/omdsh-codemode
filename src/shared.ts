@@ -5,11 +5,11 @@
  * Node-free on purpose — the browser half imports this module for real, so a
  * single `node:` import here would put host code in the client bundle's module
  * graph.
- * @module @omdsh-plugins/omdsh-code/src/shared
+ * @module @omdsh-plugins/omdsh-codemode/src/shared
  */
 
 /** Path prefix every route of this plugin lives under. */
-export const ROUTE_PREFIX = '/omdsh-code'
+export const ROUTE_PREFIX = '/omdsh-codemode'
 
 /** The terminal's WebSocket upgrade. */
 export const TERMINAL_PATH = `${ROUTE_PREFIX}/terminal`

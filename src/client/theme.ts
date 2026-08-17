@@ -6,7 +6,7 @@
  * values, and re-read whenever the app's scheme flips. The sixteen ANSI colors
  * are not tokens at all — no design system defines them — so they are two
  * curated palettes chosen to sit correctly on each scheme's background.
- * @module @omdsh-plugins/omdsh-code/src/client/theme
+ * @module @omdsh-plugins/omdsh-codemode/src/client/theme
  */
 
 import type { ITheme } from 'xterm'

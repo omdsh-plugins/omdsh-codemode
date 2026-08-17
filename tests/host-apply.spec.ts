@@ -61,9 +61,9 @@ function bench(options: { cwd?: string } = {}) {
   return { upgrades, disposers }
 }
 
-describe('omdsh-code host half', () => {
+describe('omdsh-codemode host half', () => {
   it('names itself and the services it resolves', () => {
-    expect(name).toBe('omdsh-code')
+    expect(name).toBe('omdsh-codemode')
     expect(inject).toEqual(['webServer', 'sessions', 'webRuntime'])
   })
 
