@@ -149,6 +149,34 @@ describe('WorkspaceAccountant', () => {
     expect(registry.attaches).toBe(1)
   })
 
+  it('settles on a direct call, so the row does not wait for the next attempt', async () => {
+    // What a terminal renaming its window buys: the name is generated from the
+    // first turn, so the host knows the conversation began at that moment
+    // rather than up to a minute and a half later.
+    const clock = fakeClock()
+    const registry = registryDouble()
+    const begun = begunDouble({ answer: true })
+    const accountant = new WorkspaceAccountant(() => registry.registry, begun.probe, [90_000], clock)
+    accountant.track('code-session-1', '/repo')
+    expect(await accountant.settleNow('code-session-1', '/repo')).toBe(true)
+    expect(registry.attached).toEqual(['code-session-1'])
+    // And the attempt that was still armed for it does not wake up to ask a
+    // question that has been answered.
+    await clock.run()
+    expect(begun.asked).toBe(1)
+    expect(registry.attaches).toBe(1)
+  })
+
+  it('costs nothing to track a conversation that already settled', async () => {
+    const clock = fakeClock()
+    const registry = registryDouble()
+    const begun = begunDouble({ answer: true })
+    const accountant = new WorkspaceAccountant(() => registry.registry, begun.probe, [1], clock)
+    await accountant.settleNow('code-session-1', '/repo')
+    accountant.track('code-session-1', '/repo')
+    expect(clock.pending).toBe(0)
+  })
+
   it('gives up quietly when the schedule runs out', async () => {
     const clock = fakeClock()
     const registry = registryDouble()

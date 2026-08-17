@@ -143,10 +143,21 @@ export function apply(ctx: Context, config: Config = {}): void {
   // read at the moment a terminal is wanted.
   const resolveRemote = remoteResolver(name => ctx.get(name))
 
+  const accountant = new WorkspaceAccountant(workspaceRegistry, conversationBegun(projectionCache))
+
   const terminals = new HarnessTerminalRegistry(
     command,
     config.reconnectGraceMs ?? RECONNECT_GRACE_MS,
-    terminal => { refolder.renamed(terminal.sessionId) },
+    (terminal) => {
+      refolder.renamed(terminal.sessionId)
+      // A terminal that CHANGED its window title has had a turn: the name is
+      // generated from the first one, and the greeting title is filtered out
+      // upstream. That is the earliest moment this host can know a Code
+      // conversation began — and beginning is exactly what its workspace
+      // account is waiting on, so settle it here rather than leaving the row
+      // to the next scheduled attempt, which by then can be 90 seconds away.
+      void accountant.settleNow(terminal.sessionId, terminal.cwd)
+    },
     (cwd) => {
       const remote = resolveRemote(cwd)
       if (remote === undefined) return undefined
@@ -159,7 +170,6 @@ export function apply(ctx: Context, config: Config = {}): void {
       return (sessionId, _cwd, cols, rows) => remote.openAgent({ cols, rows, sessionId })
     },
   )
-  const accountant = new WorkspaceAccountant(workspaceRegistry, conversationBegun(projectionCache))
   // The accounts an earlier build wrote, corrected once per host: see
   // `reconcileAccounts`. Started here rather than inside the socket effect
   // because it is about conversations from previous runs, not about any

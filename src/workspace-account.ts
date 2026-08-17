@@ -212,14 +212,18 @@ export class WorkspaceAccountant {
 
   /**
    * Settle one conversation's account now, without waiting for the next
-   * scheduled attempt — what leaving Code mode means, and the cheapest place
-   * to be right about both directions.
+   * scheduled attempt — what leaving Code mode means, what a terminal renaming
+   * its window means, and the cheapest place to be right about both directions.
    *
    * Begun conversations are attached. Unbegun ones are DETACHED when some
    * earlier attempt (or an earlier build of this plugin) accounted them:
    * a turn-less conversation in a workspace account is what the frame reuses
    * for New Session, so leaving one there turns the next New Session into a
    * terminal. See the module note.
+   *
+   * An attach settles the conversation for this process, here rather than only
+   * in the scheduled path: the schedule exists to find the moment a
+   * conversation begins, and a caller that already knows it has just found it.
    * @param sessionId - the Code session.
    * @param cwd - the directory it ran in.
    * @returns whether the session is now accounted.
@@ -242,9 +246,13 @@ export class WorkspaceAccountant {
       // deployment that cannot tell must not lose a grouping over the doubt,
       // and an unaccounted session is one `attachSession` would refuse anyway
       // while it has no persisted header.
-      if (accounted) return true
+      if (accounted) {
+        this.settle(sessionId)
+        return true
+      }
       if (begun === undefined) return false
       await workspace.attachSession(sessionId)
+      this.settle(sessionId)
       return true
     } catch {
       // A storage fault, or a registry that refused the attach. Neither is
@@ -333,8 +341,9 @@ export class WorkspaceAccountant {
       this.pending.delete(handle)
       this.runs.delete(sessionId)
       void this.settleNow(sessionId, cwd).then((attached) => {
-        if (attached) this.settled.add(sessionId)
-        else this.attemptFrom(index + 1, sessionId, cwd)
+        // `settleNow` records the settle itself; only the miss is this
+        // schedule's business.
+        if (!attached) this.attemptFrom(index + 1, sessionId, cwd)
       })
     }, delay)
     this.pending.add(handle)
@@ -358,6 +367,20 @@ export class WorkspaceAccountant {
       void this.reconcileAccounts()
     }, delay)
     this.pending.add(handle)
+  }
+
+  /**
+   * Record that one conversation's account is done, and stop looking for it.
+   *
+   * Both halves matter. The flag is what makes a later {@link
+   * WorkspaceAccountant.track} — a reconnect, a second socket — cost nothing;
+   * cancelling is what keeps a schedule armed before the conversation began
+   * from waking up afterwards to re-ask a question already answered.
+   * @param sessionId - the conversation now accounted.
+   */
+  private settle(sessionId: string): void {
+    this.settled.add(sessionId)
+    this.cancel(sessionId)
   }
 
   /** Drop one conversation's pending attempt, if it has one. */
