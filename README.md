@@ -115,11 +115,30 @@ The socket hands out a live agent process, so it is fenced exactly like `/api`: 
 
 ## Install
 
-Requires a `dsh` on your PATH, and the web profile that carries the mode switch:
+Requires a `dsh` on your PATH, and the web profile that carries the mode switch.
 
 ```sh
-dsh plugin --profile web add @omdsh-plugins/omdsh-codemode
-dsh plugin --profile web add @omdsh-plugins/omdsh-base   # the switch it registers into
+npx @omdsh-plugins/omdsh-plughub add omdsh-codemode
+```
+
+That is the [plugin hub](https://github.com/omdsh-plugins/omdsh-plughub)'s
+installer with argv where the button was. It resolves this plugin from the
+collection's [registry](https://github.com/omdsh-plugins/registry), installs it
+from its GitHub repository, and writes the pnpm build-allowlist entry a bare
+`dsh plugin add github:…` would leave to you — the entry carries the commit pnpm
+resolved, so it can be copied out of a failure and never written down in
+advance.
+
+`dsh plugin --profile web add @omdsh-plugins/omdsh-codemode` is **not** that command yet:
+this package is not on npm, and pnpm answers `ERR_PNPM_FETCH_404`. The same
+install is also a button, on this plugin's card in **Settings → Plugins → Plugin
+hub**, once the hub itself is in the profile.
+
+[omdsh-base](https://github.com/omdsh-plugins/omdsh-base) — the switch it
+registers into — is published, so that one installs by name:
+
+```sh
+dsh plugin --profile web add @omdsh-plugins/omdsh-base
 ```
 
 Or from a checkout, which is what an unpublished build wants. `lib/` must exist before `dsh web` runs — the loader imports `lib/index.js` directly, and a path-installed package never has its `prepare` run, so nothing builds it for you:

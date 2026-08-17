@@ -115,11 +115,29 @@ id 本身就是那份记录——会话存储旁边没有第二张表可以和�
 
 ## 安装
 
-需要 PATH 上有 `dsh`，以及承载模式开关的 web profile：
+需要 PATH 上有 `dsh`，以及承载模式开关的 web profile。
 
 ```sh
-dsh plugin --profile web add @omdsh-plugins/omdsh-codemode
-dsh plugin --profile web add @omdsh-plugins/omdsh-base   # 它注册进去的那个开关
+npx @omdsh-plugins/omdsh-plughub add omdsh-codemode
+```
+
+这就是[插件中心](https://github.com/omdsh-plugins/omdsh-plughub)的安装器，只是入
+口从按钮换成了 argv。它从这套集合的
+[registry](https://github.com/omdsh-plugins/registry) 里解析出这个插件、从它的
+GitHub 仓库装上，并把那条 pnpm 构建白名单写好——裸的 `dsh plugin add github:…`
+会把这一步留给你，而那条记录里带着 pnpm 解析出来的 commit，只能从报错里抄，事先
+写不出来。
+
+`dsh plugin --profile web add @omdsh-plugins/omdsh-codemode` 现在**还不是**那条命令：这个
+包不在 npm 上，pnpm 会回 `ERR_PNPM_FETCH_404`。同样这一次安装也可以是一个按钮——
+只要 profile 里已经有插件中心，它就在**设置 → 插件 → 插件中心**里这个插件的卡片
+上。
+
+[omdsh-base](https://github.com/omdsh-plugins/omdsh-base)——它注册进去的那个开关
+——已经发布，所以那一个按名字装：
+
+```sh
+dsh plugin --profile web add @omdsh-plugins/omdsh-base
 ```
 
 也可以从检出安装，这是尚未发布的构建要走的路。`dsh web` 启动前 `lib/` 必须存在——loader 直接 import `lib/index.js`，而按路径安装的包不会跑 `prepare`，没有任何环节替你构建：
