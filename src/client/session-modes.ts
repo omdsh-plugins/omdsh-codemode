@@ -16,7 +16,7 @@
  */
 
 export type {
-  ModeSegment, ModeSegmentInput, ModeSegmentPatch, SessionModes,
+  ColumnScope, ModeSegment, ModeSegmentInput, ModeSegmentPatch, SessionModes,
 } from '@omdsh-plugins/omdsh-base/client'
 
 /** Service name the registry is published under. */

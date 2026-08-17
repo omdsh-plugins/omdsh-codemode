@@ -238,14 +238,19 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
     // here — so the sidebar gains Code rows by this plugin being installed,
     // with nothing about Code in the code that paints them.
     owns: isCodeSessionId,
-    // What this mode's column is showing, for the surfaces beside it. It has
-    // to be declared, because the ordinary answer — the selected conversation
-    // — is one this mode deliberately never gives: a Code conversation is
-    // SHOWN, never selected, so a file tree keyed on the selection would sit
-    // beside this terminal describing the conversation behind it. Read only
-    // while this segment holds the column, which is why the store below can go
-    // on deriving what Code mode WOULD show at all times.
-    scope: controller.scope,
+    // What this mode's column is showing, for the surfaces beside it — the
+    // sidebar's cursor among them. It has to be declared, because the ordinary
+    // answer — the selected conversation — is one this mode deliberately never
+    // gives: a Code conversation is SHOWN, never selected, so a file tree keyed
+    // on the selection would sit beside this terminal describing the
+    // conversation behind it. Read only while this segment holds the column,
+    // which is why the store can go on deriving what Code mode WOULD show at
+    // all times.
+    //
+    // `column` rather than `scope`, and the difference is which conversation:
+    // the scope names the one the SOCKET belongs to, the column the one the
+    // terminal is driving. See CodeModeController.column.
+    scope: controller.column,
     // Whether a terminal has anywhere to run, which this segment used to answer
     // with the SCOPE — derived from the selected conversation, and so empty on a
     // page that has never opened one. That made Code permanently grey in the one

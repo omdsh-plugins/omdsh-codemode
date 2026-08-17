@@ -232,6 +232,66 @@ describe('the terminal scope', () => {
   })
 })
 
+describe('what the column is showing', () => {
+  // The scope names the conversation the SOCKET belongs to; this names the one
+  // the terminal is driving. Every surface beside the column reads the second,
+  // the sidebar's cursor included, and publishing the first is what used to
+  // leave that cursor on the conversation behind the terminal.
+  it('shows nothing while there is nowhere to run', () => {
+    expect(bench().controller.column.getSnapshot()).toBeUndefined()
+  })
+
+  it('shows the Code conversation a row was clicked on', () => {
+    const b = bench({
+      sessions: sessionList([summary('session-1', '/repo'), summary('code-session-a', '/repo')], 'session-1'),
+    })
+    expect(b.controller.showConversation('code-session-a')).toBe(true)
+    expect(b.controller.column.getSnapshot()).toEqual({ sessionId: 'code-session-a', cwd: '/repo' })
+  })
+
+  it('shows the conversation New Session minted, before any list has heard of it', () => {
+    const b = bench({ workspaces: workspaceList([{ path: '/repo', sessionIds: [] }]) })
+    expect(b.controller.startNewConversation('w0')).toBe(true)
+    const shown = b.controller.column.getSnapshot()
+    expect(shown?.cwd).toBe('/repo')
+    expect(isCodeSessionId(shown?.sessionId ?? '')).toBe(true)
+    expect(shown?.sessionId).toBe(b.controller.scope.getSnapshot()?.codeSessionId)
+  })
+
+  it('shows the terminal the host attached, not the conversation the socket names', () => {
+    // Pressing Code from a Work conversation: the socket belongs to that
+    // conversation and the terminal drives another one entirely.
+    const b = bench({ sessions: sessionList([summary('session-1', '/repo')], 'session-1') })
+    expect(b.controller.column.getSnapshot()).toEqual({ sessionId: 'session-1', cwd: '/repo' })
+    b.controller.noteAttached('/repo', 'code-session-live')
+    expect(b.controller.column.getSnapshot()).toEqual({ sessionId: 'code-session-live', cwd: '/repo' })
+    // And the socket's own conversation has not moved, or the terminal would
+    // have been restarted under the user.
+    expect(b.controller.scope.getSnapshot()?.sessionId).toBe('session-1')
+  })
+
+  it('publishes only when the conversation or its directory moved', () => {
+    // The scope republishes for facts no surface beside the column can see —
+    // `fresh` settling, a resume offer changing — and every one of those would
+    // otherwise repaint the sidebar.
+    const b = bench({ workspaces: workspaceList([{ path: '/repo', sessionIds: [] }]) })
+    b.controller.startNewConversation('w0')
+    const seen: unknown[] = []
+    b.controller.column.subscribe(() => { seen.push(b.controller.column.getSnapshot()) })
+    b.controller.noteAttached('/repo', b.controller.scope.getSnapshot()?.codeSessionId ?? '')
+    expect(seen).toEqual([])
+  })
+
+  it('stops showing anything once there is nowhere to run', () => {
+    const b = bench({
+      sessions: sessionList([summary('session-1', '/repo'), summary('session-2', undefined)], 'session-1'),
+    })
+    expect(b.controller.column.getSnapshot()?.sessionId).toBe('session-1')
+    b.sessions.set(sessionList([summary('session-1', '/repo'), summary('session-2', undefined)], 'session-2'))
+    expect(b.controller.column.getSnapshot()).toBeUndefined()
+  })
+})
+
 describe('pressing Code with nothing open', () => {
   it('starts a terminal in the project, deriving one having been impossible', () => {
     // The fresh page: nothing is selected, so the scope has nothing to derive

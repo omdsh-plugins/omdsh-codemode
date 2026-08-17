@@ -55,6 +55,7 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { isCodeSessionId, mintCodeSessionId } from '../code-session.ts'
 import type { Scope } from './api.ts'
+import type { ColumnScope } from './session-modes.ts'
 
 /** Everything the controller reaches outside itself, so a spec can drive it whole. */
 export interface CodeModeDeps {
@@ -99,6 +100,26 @@ export interface CodeModeDeps {
 export class CodeModeController {
   /** What the column's socket is built from; `undefined` while there is nowhere to run. */
   readonly scope: SnapshotStore<Scope | undefined> = createSnapshotStore<Scope | undefined>(undefined)
+
+  /**
+   * What the column is SHOWING, for every surface beside it — the sidebar's
+   * cursor, a file tree, a panel.
+   *
+   * A second store rather than the scope itself, and the difference is one
+   * field. The scope's `sessionId` is the WEB conversation the socket belongs
+   * to: it rides the socket URL as `session`, so it is the thing that must not
+   * move if the terminal is to stay up. The conversation ON SCREEN is the Code
+   * one the terminal drives, and the two are the same id only some of the time
+   * — clicking a Code row pins it, New Session mints it, and pressing Code from
+   * a Work conversation leaves the scope naming that conversation until the
+   * host says which terminal it attached.
+   *
+   * Publishing the scope here instead is what left the sidebar's cursor on a
+   * conversation nobody was looking at: `sessionModes.column` was answering
+   * with the socket's conversation, which is the one BEHIND the terminal.
+   */
+  readonly column: SnapshotStore<ColumnScope | undefined>
+    = createSnapshotStore<ColumnScope | undefined>(undefined)
 
   /**
    * Whether pressing Code would go anywhere: a terminal to show, a project to
@@ -200,8 +221,11 @@ export class CodeModeController {
    * is a log the reader refuses — the conversation stops opening at all.
    *
    * So a Code conversation is shown the way a terminal is: pinned here, drawn
-   * in the column, and never selected. The cost is the sidebar's highlight,
-   * which stays on whatever web conversation is open behind the terminal.
+   * in the column, and never selected. What that used to cost was the
+   * sidebar's highlight — it follows the SELECTION, so it stayed on whatever
+   * web conversation was open behind the terminal — which is why this
+   * controller publishes {@link CodeModeController.column} beside the scope
+   * and the mode system moves the cursor off it.
    * @param codeSessionId - the conversation to show.
    * @param snapshot - the session list to read from; defaults to the live one.
    * @returns true when it could be shown; false when nothing knows its
@@ -216,7 +240,7 @@ export class CodeModeController {
       ?? snapshot.byId[codeSessionId as SessionId]?.cwd
     if (cwd === undefined || cwd === '') return false
     this.pinned = { sessionId: codeSessionId, cwd, codeSessionId }
-    this.scope.set(this.pinned)
+    this.publishScope(this.pinned)
     this.settleEnterable()
     this.deps.enterCode()
     return true
@@ -343,9 +367,33 @@ export class CodeModeController {
     // reads the directory off the session store first, so naming the
     // conversation the user is LEAVING would start the new terminal in that
     // one's directory whenever the two differ.
-    this.scope.set(this.pinned)
+    this.publishScope(this.pinned)
     this.settleEnterable()
     return true
+  }
+
+  /**
+   * Publish one scope, and what the column is showing with it — the single
+   * writer of both stores, so the socket's conversation and the conversation on
+   * screen can never be derived from different moments.
+   *
+   * The terminal's conversation when the host has named one, and the socket's
+   * otherwise: the window between pressing Code and the host answering is the
+   * only time this mode cannot say better, and reporting nothing then would
+   * take the cursor off the sidebar instead of leaving it where it was.
+   * @param next - the scope, or undefined when there is nowhere to run.
+   */
+  private publishScope(next: Scope | undefined): void {
+    this.scope.set(next)
+    const shown = next === undefined
+      ? undefined
+      : { sessionId: next.codeSessionId ?? next.sessionId, cwd: next.cwd }
+    const previous = this.column.getSnapshot()
+    // Guarded rather than set through: every surface beside the column watches
+    // this, and the scope republishes for facts none of them can see (`fresh`
+    // settling, a resume offer changing).
+    if (previous?.sessionId === shown?.sessionId && previous?.cwd === shown?.cwd) return
+    this.column.set(shown)
   }
 
   /**
@@ -405,7 +453,7 @@ export class CodeModeController {
       // fact settling rather than a terminal restarting.
       || previous?.fresh !== next?.fresh
     ) {
-      this.scope.set(next)
+      this.publishScope(next)
     }
     // After the scope, and unconditionally: a project registered (or the last
     // one removed) moves this without moving the scope at all.

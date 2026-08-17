@@ -84,7 +84,9 @@ Pressing **New Session** while Code mode holds the column means another Code con
 
 The conversation is **named here rather than asked for**, and that is what makes the request idempotent: the socket reconnects, the column remounts, the window resizes, and every one of those asks for the same conversation instead of starting another terminal. The socket says `fresh`, which tells the host this id is newly minted rather than resumed — nobody can be holding it, so its terminal becomes this directory's terminal from the moment it starts.
 
-Until its first turn is persisted the new conversation has no row, so the sidebar goes on showing the one you came from. The row appears on its own once that turn lands — and the selection does not move with it, because a Code conversation is **shown, never selected**: making one the runtime's current session is what makes this host resume it, on a log its terminal is still appending to. The cost is the sidebar highlight, which stays on the web conversation behind the terminal.
+Until its first turn is persisted the new conversation has no row at all — nothing in the harness has heard of it — so there is nothing in the sidebar to highlight. The row appears on its own once that turn lands, and the highlight lands with it.
+
+The *selection* still does not move, and never will: a Code conversation is **shown, never selected**, because making one the runtime's current session is what makes this host resume it, on a log its terminal is still appending to. What moves instead is the sidebar's cursor. This plugin publishes the conversation its terminal is driving as the mode system's `column`, and `omdsh-base` paints the highlight onto that row — so opening a Code conversation moves the cursor onto it, and the web conversation left selected behind the terminal gives the highlight up until you go back to it.
 
 Two details are worth knowing before they surprise you:
 
