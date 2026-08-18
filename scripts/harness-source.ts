@@ -37,7 +37,7 @@ const root = resolve(import.meta.dirname, '..')
 const PREFIX = 'harness-source'
 
 /** The harness release this plugin is pinned to when it builds from the registry. */
-const HARNESS_VERSION = '0.1.0-rc.6'
+const HARNESS_VERSION = '0.1.0-rc.7'
 
 /**
  * The framework is versioned on its own train, not the harness release's, so
