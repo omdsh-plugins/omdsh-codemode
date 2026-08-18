@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionListState, WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
-import { ModeSegmentRegistry } from '@omdsh-plugins/omdsh-base/src/client/mode-segments.ts'
+import { ModeSegmentRegistry } from '@omdsh-plugins/omdsh-basemode/src/client/mode-segments.ts'
 import { apply, COLUMN_PRIORITY, inject, isCodeSessionId, SEGMENT_ID } from '../src/client/index.ts'
 import type { Scope } from '../src/client/api.ts'
 import type { CodeColumnInjected } from '../src/client/contract.ts'
@@ -23,7 +23,7 @@ function bench(options: {
   current?: string
   workspacePath?: string
   chord?: string
-  /** Compose without the mode switch, the way a profile with no omdsh-base does. */
+  /** Compose without the mode switch, the way a profile with no omdsh-basemode does. */
   modes?: false
   /** What the Host's directory picker answers; null is the cancelled dialog. */
   picked?: string | null
@@ -143,7 +143,7 @@ describe('omdsh-codemode browser half', () => {
     // `sessionModes` is NOT here on purpose. cordis waits for an injected
     // service forever, and the client boot fails the whole page for a loader
     // entry left PENDING — so naming a contributed service here would turn a
-    // profile without omdsh-base from "Code mode off" into "the page is dead".
+    // profile without omdsh-basemode from "Code mode off" into "the page is dead".
     expect(inject).toEqual(['slots', 'sessions', 'workspaces', 'locale'])
     expect(inject).not.toContain('sessionModes')
   })

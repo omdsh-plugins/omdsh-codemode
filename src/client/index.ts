@@ -18,7 +18,7 @@
  *
  * Its dependency on the mode system is the switch, not the package: the
  * registry is resolved by service name, so a composition without
- * `@omdsh-plugins/omdsh-base` never publishes `sessionModes` and this plugin
+ * `@omdsh-plugins/omdsh-basemode` never publishes `sessionModes` and this plugin
  * does nothing at all. That is the off state, and it needs no configuration.
  *
  * What carries that dependency is a RESTRICTED fiber and not this plugin's own
@@ -40,7 +40,7 @@ import { isCodeSessionId } from '../code-session.ts'
 import type { CodeColumnInjected } from './contract.ts'
 import { CodeModeController } from './code-mode.ts'
 import { TerminalTitleSync } from './title-sync.ts'
-import type { SessionModes } from './session-modes.ts'
+import type { ModeProjectClaim, SessionModes } from './session-modes.ts'
 import { MODE_COMMAND, SHORTCUT_SERVICE, withChord, type IShortcutClient } from './shortcut.ts'
 import { SESSION_MODES } from './session-modes.ts'
 import { CodeColumn } from './CodeColumn.tsx'
@@ -157,6 +157,14 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
     // an already-registered directory resolves to the same project rather than
     // a second one, so pressing Code twice on the same answer is idempotent.
     registerProject: async (path: string) => (await workspaces.create({ path })).path,
+    // Asked of the registry, because only the mode that owns a conversation
+    // knows whether its directory is a project or a store of its own. A
+    // conversation nobody claims is in a project, which is what one is — and so
+    // is one whose owner is too old to answer; see ModeProjectClaim.
+    inProject: (sessionId) => {
+      const owner = modes.modeOf(sessionId) as ModeProjectClaim | undefined
+      return owner?.inProject !== false
+    },
   })
   ctx.effect(() => controller.start(), 'omdsh-codemode: derived terminal scope')
 
@@ -255,7 +263,7 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
     // with the SCOPE — derived from the selected conversation, and so empty on a
     // page that has never opened one. That made Code permanently grey in the one
     // composition where this plugin is the only mode plugin: a fresh install
-    // with `omdsh-base` alone selects nothing, where `omdsh-chatmode`'s managed
+    // with `omdsh-basemode` alone selects nothing, where `omdsh-chatmode`'s managed
     // Chat workspace always has something open. What a terminal needs is a
     // DIRECTORY, and a conversation is only one of the ways to name one.
     available: controller.enterable.getSnapshot(),

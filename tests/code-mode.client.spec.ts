@@ -69,6 +69,11 @@ function bench(options: {
   picked?: string | null
   /** A picker the Host could not open, or a directory it refused to register. */
   pickerFails?: 'pick' | 'register'
+  /**
+   * Conversations that live in no project — a chat, as the mode registry
+   * reports it. Everything else is in one, which is what a conversation is.
+   */
+  outsideProjects?: string[]
 } = {}) {
   const sessions = createSnapshotStore(options.sessions ?? sessionList([]))
   const workspaces = createSnapshotStore(options.workspaces ?? workspaceList([]))
@@ -91,6 +96,7 @@ function bench(options: {
   })
   const controller = new CodeModeController({
     sessions, workspaces, enterCode, clearSelection, refreshSessions, pickDirectory, registerProject,
+    inProject: (sessionId: string) => !(options.outsideProjects ?? []).includes(sessionId),
   })
   const stop = controller.start()
   return {
@@ -289,6 +295,88 @@ describe('what the column is showing', () => {
     expect(b.controller.column.getSnapshot()?.sessionId).toBe('session-1')
     b.sessions.set(sessionList([summary('session-1', '/repo'), summary('session-2', undefined)], 'session-2'))
     expect(b.controller.column.getSnapshot()).toBeUndefined()
+  })
+})
+
+describe('a conversation that is in no project', () => {
+  // A chat: its directory is a store the mode that owns it keeps, and nobody
+  // works there. Deriving from it opened a terminal inside the folder chats
+  // are filed in — so Code comes back to where it last was instead, which is
+  // the rule Work follows from a chat too.
+  it('names no directory of its own, however plainly it has one', () => {
+    const b = bench({
+      sessions: sessionList([summary('chat-1', '/home/.dsh/sessions/chat')], 'chat-1'),
+      outsideProjects: ['chat-1'],
+    })
+    expect(b.controller.scope.getSnapshot()).toBeUndefined()
+  })
+
+  it('comes back to the terminal this page already has', () => {
+    const b = bench({
+      sessions: sessionList([
+        summary('session-1', '/repo'), summary('chat-1', '/chat-store'),
+      ], 'session-1'),
+      outsideProjects: ['chat-1'],
+    })
+    b.controller.noteAttached('/repo', 'code-session-live')
+    b.sessions.set(sessionList([
+      summary('session-1', '/repo'), summary('chat-1', '/chat-store'),
+    ], 'chat-1'))
+    expect(b.controller.scope.getSnapshot()).toEqual({
+      sessionId: 'code-session-live',
+      cwd: '/repo',
+      codeSessionId: 'code-session-live',
+    })
+  })
+
+  it('offers that project\'s most recent conversation when no terminal is up', () => {
+    const b = bench({
+      sessions: sessionList([
+        summary('session-1', '/repo'),
+        summary('code-session-old', '/repo', 100),
+        summary('code-session-new', '/repo', 200),
+        summary('chat-1', '/chat-store'),
+      ], 'session-1'),
+      outsideProjects: ['chat-1'],
+    })
+    b.sessions.set(sessionList([
+      summary('session-1', '/repo'),
+      summary('code-session-old', '/repo', 100),
+      summary('code-session-new', '/repo', 200),
+      summary('chat-1', '/chat-store'),
+    ], 'chat-1'))
+    const scope = b.controller.scope.getSnapshot()
+    expect(scope?.cwd).toBe('/repo')
+    // Offered, never named: the conversation may be held by another process,
+    // and the host's own live table outranks a browser's guess.
+    expect(scope?.resumeSessionId).toBe('code-session-new')
+    expect(scope?.codeSessionId).toBeUndefined()
+    // And the socket names the offer rather than the chat, or the host would
+    // resolve the chat's own directory and put the terminal back in it.
+    expect(scope?.sessionId).toBe('code-session-new')
+  })
+
+  it('starts nowhere at all before Code has been anywhere', () => {
+    const b = bench({
+      sessions: sessionList([summary('chat-1', '/chat-store')], 'chat-1'),
+      outsideProjects: ['chat-1'],
+    })
+    expect(b.controller.scope.getSnapshot()).toBeUndefined()
+  })
+
+  it('is not the project a press starts a terminal in either', () => {
+    // The runtime's "most recently active" workspace is the chat store for
+    // somebody who has been chatting, and the cold start used to take it.
+    const b = bench({
+      sessions: sessionList([summary('chat-1', '/chat-store')], 'chat-1'),
+      workspaces: workspaceList([
+        { path: '/chat-store', sessionIds: ['chat-1'] },
+        { path: '/repo', sessionIds: [] },
+      ], 'w0'),
+      outsideProjects: ['chat-1'],
+    })
+    expect(b.controller.ensureScope()).toBe(true)
+    expect(b.controller.scope.getSnapshot()?.cwd).toBe('/repo')
   })
 })
 

@@ -97,7 +97,7 @@
     "@deepseek-ai/dsh-host-webserver": ">=0.1.0-rc.6",
     "@deepseek-ai/dsh-invariants": ">=0.1.0-rc.6",
     "@deepseek-ai/dsh-session": ">=0.1.0-rc.6",
-    "@omdsh-plugins/omdsh-base": "*",
+    "@omdsh-plugins/omdsh-basemode": "*",
     "react": "^18.2.0"
   },
   "devDependencies": {
@@ -111,7 +111,7 @@
     "@deepseek-ai/dsh-host-webserver": "0.1.0-rc.6",
     "@deepseek-ai/dsh-invariants": "0.1.0-rc.6",
     "@deepseek-ai/dsh-session": "0.1.0-rc.6",
-    "@omdsh-plugins/omdsh-base": "^0.1.0",
+    "@omdsh-plugins/omdsh-basemode": "^0.2.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^22.20.0",

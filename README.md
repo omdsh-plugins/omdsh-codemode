@@ -10,13 +10,13 @@ The web GUI and the terminal are two front doors onto the same harness. This plu
 
 | Surface | Where it comes from |
 |---|---|
-| The **Code** segment in the mode switch | A registration in `sessionModes`, the segment registry [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) publishes |
+| The **Code** segment in the mode switch | A registration in `sessionModes`, the segment registry [omdsh-basemode](https://github.com/omdsh-plugins/omdsh-basemode) publishes |
 | The terminal column | An entry in `conversation`, ui-layout's single seat for the whole centre, registered at a lower priority than the shipped conversation and disposed when the mode is left |
 | The socket behind it | `GET /omdsh-codemode/terminal` (WebSocket upgrade), fenced exactly like `/api` |
 | Code conversations in the sidebar, under the workspace they ran in | `Workspace.attachSession` on the harness's own registry, once the terminal has written something |
 | **New Session** starting another terminal instead of leaving the mode | The `newSession` answer this plugin's segment registers, which the switch offers to whoever holds the column |
 | Sidebar rows following a `/rename` made inside the terminal | The window title the terminal announces, read off the bytes this plugin already relays |
-| The red dot on those rows | The `tone` and the `owns` classifier this plugin's segment carries; the sidebar's dots are painted by [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) for whatever modes are registered |
+| The red dot on those rows | The `tone` and the `owns` classifier this plugin's segment carries; the sidebar's dots are painted by [omdsh-basemode](https://github.com/omdsh-plugins/omdsh-basemode) for whatever modes are registered |
 
 **Nothing in the harness is modified, and nothing of the terminal is reimplemented.** What is on screen is `@omdsh-plugins/omdsh-tui`'s own front door — its transcript, tool cards, `/resume`, every key it binds — because this plugin starts that program and relays bytes.
 
@@ -76,6 +76,8 @@ Four answers, in the order of how much is actually known:
 3. **The project's most recent Code conversation**, which is what pressing Code means on a host that has just started: come back to the work, not to an empty prompt. The most recent by the same clock the sidebar orders by, and never one nothing was said in — a terminal somebody opened and walked away from leaves one of those behind, and there is nothing in it to come back to.
 4. **A new conversation**, when the project has none.
 
+Which project all four are asked about is the conversation on screen — with one exception, and it is the reason this section has a fifth paragraph. A conversation that lives in **no project** names no directory a terminal could run in: a chat is filed in a store the plugin that owns it keeps, and nobody works there. Pressing Code beside one used to open a terminal inside that folder. It now comes back to where Code last was instead — this page's own live terminal in that project, else that project's most recent Code conversation, offered the same way answer 3 is — which is the rule Work follows from a chat as well. A page that has never had Code anywhere falls through to the cold start below, and that skips a group whose conversations are all in no project too. Which conversations those are is [omdsh-basemode](https://github.com/omdsh-plugins/omdsh-basemode)'s `inProject`, declared by the mode that owns them, so nothing here knows which of them is Chat.
+
 The order is the whole safety argument, and the third answer sits where it does deliberately. The browser can see the session list; it cannot see a running process. A conversation started a moment ago has nothing on disk to be "most recent", so a surface that outranked the live table would revive an older conversation over a running agent — and two live copies of one conversation interleave their sequence numbers until the log stops loading at all. So the browser **offers** (`resume=` on the socket) and the host decides, taking the offer only when it has nothing running in that directory. A log that some earlier accident already damaged that way is not beyond saving: `pnpm run repair:sessions` is the recovery tool for exactly that shape, and [Commands](#commands) says how to run it.
 
 ## New Session starts another terminal
@@ -86,7 +88,7 @@ The conversation is **named here rather than asked for**, and that is what makes
 
 Until its first turn is persisted the new conversation has no row at all — nothing in the harness has heard of it — so there is nothing in the sidebar to highlight. The row appears on its own once that turn lands, and the highlight lands with it.
 
-The *selection* still does not move, and never will: a Code conversation is **shown, never selected**, because making one the runtime's current session is what makes this host resume it, on a log its terminal is still appending to. What moves instead is the sidebar's cursor. This plugin publishes the conversation its terminal is driving as the mode system's `column`, and `omdsh-base` paints the highlight onto that row — so opening a Code conversation moves the cursor onto it, and the web conversation left selected behind the terminal gives the highlight up until you go back to it.
+The *selection* still does not move, and never will: a Code conversation is **shown, never selected**, because making one the runtime's current session is what makes this host resume it, on a log its terminal is still appending to. What moves instead is the sidebar's cursor. This plugin publishes the conversation its terminal is driving as the mode system's `column`, and `omdsh-basemode` paints the highlight onto that row — so opening a Code conversation moves the cursor onto it, and the web conversation left selected behind the terminal gives the highlight up until you go back to it.
 
 Two details are worth knowing before they surprise you:
 
@@ -136,11 +138,11 @@ this package is not on npm, and pnpm answers `ERR_PNPM_FETCH_404`. The same
 install is also a button, on this plugin's card in **Settings → Plugins → Plugin
 hub**, once the hub itself is in the profile.
 
-[omdsh-base](https://github.com/omdsh-plugins/omdsh-base) — the switch it
+[omdsh-basemode](https://github.com/omdsh-plugins/omdsh-basemode) — the switch it
 registers into — is published, so that one installs by name:
 
 ```sh
-dsh plugin --profile web add @omdsh-plugins/omdsh-base
+dsh plugin --profile web add @omdsh-plugins/omdsh-basemode
 ```
 
 Or from a checkout, which is what an unpublished build wants. `lib/` must exist before `dsh web` runs — the loader imports `lib/index.js` directly, and a path-installed package never has its `prepare` run, so nothing builds it for you:
@@ -150,7 +152,7 @@ pnpm install
 pnpm run build
 
 dsh plugin --profile web add "$PWD"           # this plugin
-dsh plugin --profile web add ../omdsh-base    # the switch it registers into
+dsh plugin --profile web add ../omdsh-basemode    # the switch it registers into
 ```
 
 The terminal it starts lives in **its own profile** (`omdsh-tui` by default), and that one is **checkout-only**: unlike every other companion named here it is not in the collection's registry, so there is no `@omdsh-plugins/omdsh-tui` to add. Install it the way [that repository](https://github.com/omdsh-plugins/omdsh-tui#install) describes, which is one script:
@@ -175,7 +177,7 @@ Remove it the same way:
 dsh plugin --profile web remove @omdsh-plugins/omdsh-codemode
 ```
 
-Without [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) the profile still composes and boots, and this plugin's browser half mounts and does nothing: `sessionModes` is resolved by service name, and every registration below it rides a restricted fiber that waits for it. That is the intended off state — there is no switch for a third segment to appear in, so Code mode leaves the page exactly as it found it.
+Without [omdsh-basemode](https://github.com/omdsh-plugins/omdsh-basemode) the profile still composes and boots, and this plugin's browser half mounts and does nothing: `sessionModes` is resolved by service name, and every registration below it rides a restricted fiber that waits for it. That is the intended off state — there is no switch for a third segment to appear in, so Code mode leaves the page exactly as it found it.
 
 What that off state must NOT be is a top-level `inject` on `sessionModes`. cordis waits for an injected service forever, and the web client sweeps every loader entry once the tree settles and fails the whole page for any left `pending` — so naming a contributed service there turns "Code mode is off" into `web boot: 1 entry did not activate`, a dead UI rather than a missing segment. The rule generalises to every service another plugin publishes, and is written down in [CONVENTIONS.md](https://omdsh-plugins.github.io/conventions/?lang=en#rule-9).
 

@@ -94,6 +94,21 @@ export interface CodeModeDeps {
    * @returns its canonical path, as the Host recorded it.
    */
   registerProject(path: string): Promise<string>
+  /**
+   * Whether one conversation lives in a PROJECT — a directory somebody works
+   * in — as the mode registry answers it.
+   *
+   * A terminal needs a directory, and a conversation is one of the ways to
+   * name one; this is the question of whether it names a usable one. Chat's
+   * conversations do not: they are filed in a store its own plugin keeps, and
+   * a terminal opened there is in nobody's project. The answer comes from the
+   * registry because only the mode that owns a conversation can give it — and
+   * a composition with no mode system says yes to everything, which is the
+   * behaviour this plugin had before the question existed.
+   * @param sessionId - the conversation being asked about.
+   * @returns true unless some mode declared its conversations are not.
+   */
+  inProject(sessionId: string): boolean
 }
 
 /** Derives the terminal's scope and follows Code conversations into the column. */
@@ -173,6 +188,18 @@ export class CodeModeController {
 
   /** The selection the last recompute saw, so entering follows a CHANGE. */
   private lastCurrent: SessionId | undefined
+
+  /**
+   * The last directory this surface had a terminal for — where Code mode WAS.
+   *
+   * It answers the one navigation with nothing to derive from: pressing Code
+   * while the conversation on screen is in no project of its own. A chat is
+   * exactly that — it is filed in a directory the deployment manages, and
+   * nobody works there — so deriving from it opened a terminal inside the
+   * folder chats are stored in. Coming back to where Code last was is what the
+   * press means instead, which is also the rule Work follows from a chat.
+   */
+  private lastProject: string | undefined
 
   /** Accounted Code sessions already asked for, so one miss triggers one pull. */
   private readonly refreshed = new Set<string>()
@@ -277,7 +304,7 @@ export class CodeModeController {
    */
   ensureScope(): boolean {
     if (this.scope.getSnapshot() !== undefined) return true
-    const workspaceId = this.defaultWorkspace()
+    const workspaceId = this.defaultProject()
     if (workspaceId === undefined) return false
     return this.startNewConversation(workspaceId)
   }
@@ -384,6 +411,10 @@ export class CodeModeController {
    * @param next - the scope, or undefined when there is nowhere to run.
    */
   private publishScope(next: Scope | undefined): void {
+    // Where Code was, recorded as it settles rather than on the press: every
+    // scope that names a directory names one worth coming back to, and a scope
+    // going away is the screen moving on rather than that project being over.
+    if (next?.cwd !== undefined && next.cwd !== '') this.lastProject = next.cwd
     this.scope.set(next)
     const shown = next === undefined
       ? undefined
@@ -410,6 +441,42 @@ export class CodeModeController {
     const usable = items.filter(item => item.path !== '')
     return usable.find(item => item.workspaceId === recentWorkspaceId)?.workspaceId
       ?? usable[0]?.workspaceId
+  }
+
+  /**
+   * The same answer, with the groups that are not projects taken out — what a
+   * press actually starts a terminal in.
+   *
+   * A mode may keep a workspace of its own for conversations that live nowhere
+   * in particular (Chat's), and the runtime's "most recently active" is exactly
+   * that one for somebody who has been chatting. Starting a terminal there is
+   * the bug this whole path exists to avoid, so the cold start skips it.
+   *
+   * A group is one of those when it accounts for conversations and NONE of them
+   * is in a project. An empty group says nothing either way and is kept: it may
+   * be the project the user just registered.
+   *
+   * Split from {@link CodeModeController.defaultWorkspace} rather than folded
+   * into it because that one is read on every recompute, to settle whether the
+   * segment is available at all — and asking the registry per conversation
+   * there would put a scan of the session list on the streaming path. Whether
+   * ANY project exists is the right question for availability anyway.
+   * @returns its workspace id, or undefined when no project is registered.
+   */
+  private defaultProject(): string | undefined {
+    const { items, recentWorkspaceId } = this.deps.workspaces.getSnapshot()
+    const usable = items.filter(item => item.path !== '' && this.isProject(item.sessionIds))
+    return usable.find(item => item.workspaceId === recentWorkspaceId)?.workspaceId
+      ?? usable[0]?.workspaceId
+  }
+
+  /**
+   * Whether one group's conversations say it is a project.
+   * @param sessionIds - the conversations it accounts for.
+   * @returns true unless every one of them is in no project.
+   */
+  private isProject(sessionIds: readonly SessionId[]): boolean {
+    return sessionIds.length === 0 || sessionIds.some(id => this.deps.inProject(id))
   }
 
   /** Settle whether pressing Code would go anywhere; see {@link CodeModeController.enterable}. */
@@ -485,6 +552,11 @@ export class CodeModeController {
     current: SessionId | undefined,
   ): Scope | undefined {
     if (current === undefined) return undefined
+    // A conversation that is in no project of its own names no directory a
+    // terminal could run in — its own is a store some mode keeps, not
+    // somewhere anyone works. Code comes back to where it last was instead,
+    // which is what pressing it from a chat has to mean.
+    if (!this.deps.inProject(current)) return this.scopeInLastProject(sessions, workspaces)
     const summary = sessions.byId[current]
     // The workspace account is the authority on where a conversation belongs;
     // the session's own header covers one that is not grouped yet.
@@ -507,6 +579,36 @@ export class CodeModeController {
       cwd,
       ...offered === undefined ? {} : { resumeSessionId: offered },
     }
+  }
+
+  /**
+   * What Code shows when the conversation on screen names no project of its
+   * own: the directory this surface last had a terminal for.
+   *
+   * The terminal this page opened there wins — it is running, and coming back
+   * to a chat and pressing Code should land in it mid-turn. Failing that the
+   * project's most recent Code conversation is OFFERED rather than named, for
+   * the reason every offer here is one: a conversation this page did not start
+   * may be held by another process, and the host's own live table is the only
+   * trustworthy answer to "the terminal for this project".
+   * @param sessions - the session list snapshot.
+   * @param workspaces - the workspace list snapshot.
+   * @returns the scope, or undefined before Code has been anywhere.
+   */
+  private scopeInLastProject(
+    sessions: SessionListState,
+    workspaces: WorkspaceListState,
+  ): Scope | undefined {
+    const cwd = this.lastProject
+    if (cwd === undefined) return undefined
+    const attached = this.attached.get(cwd)
+    if (attached !== undefined) return { sessionId: attached, cwd, codeSessionId: attached }
+    const offered = this.recentIn(cwd, sessions, workspaces)
+    if (offered === undefined) return undefined
+    // The socket's conversation is the OFFER rather than the one on screen:
+    // naming the chat would have the host resolve the chat's directory, which
+    // is the whole thing being avoided here.
+    return { sessionId: offered, cwd, resumeSessionId: offered }
   }
 
   /**

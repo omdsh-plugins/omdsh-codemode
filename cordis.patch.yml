@@ -5,7 +5,7 @@
 # web add @omdsh-plugins/omdsh-codemode` installs it into the profile
 # directory and appends it to `dsh.profile.bundles`, so this file is applied
 # after `@deepseek-ai/dsh-base`, `@deepseek-ai/dsh-web-app`, and (where it is
-# installed) `@omdsh-plugins/omdsh-base` — the harness tree stays exactly as
+# installed) `@omdsh-plugins/omdsh-basemode` — the harness tree stays exactly as
 # it shipped, and removing the plugin removes the row with it.
 #
 # The row is dual-face, the ordinary `dsh.client` shape:
@@ -18,7 +18,7 @@
 #     out-of-tree row is found exactly like an in-box one.
 #
 # The browser half waits on `sessionModes`, the segment registry published by
-# omdsh-base's client half — on a RESTRICTED fiber, never through its own
+# omdsh-basemode's client half — on a RESTRICTED fiber, never through its own
 # `inject`. A profile with this bundle and not that one composes and boots, and
 # the client plugin mounts and registers nothing, because there is no switch
 # for it to appear in. That is the intended off state, so this row states no

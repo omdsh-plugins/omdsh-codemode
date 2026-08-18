@@ -10,13 +10,13 @@ Web GUI 与终端是同一个 harness 的两道前门。本插件是让其中一
 
 | 界面 | 从哪来 |
 |---|---|
-| 模式开关里的 **Code** 分段 | 向 [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) 发布的分段注册表 `sessionModes` 的一次注册 |
+| 模式开关里的 **Code** 分段 | 向 [omdsh-basemode](https://github.com/omdsh-plugins/omdsh-basemode) 发布的分段注册表 `sessionModes` 的一次注册 |
 | 终端列 | `conversation` 的一个条目——ui-layout 中代表整个中列的唯一席位；以低于随包会话的优先级注册，离开该模式时销毁 |
 | 它背后的 socket | `GET /omdsh-codemode/terminal`（WebSocket 升级），与 `/api` 同样的围栏 |
 | 侧边栏里归入所属工作区的 Code 对话 | 终端写下第一笔之后，对 harness 自己的注册表调用 `Workspace.attachSession` |
 | **New Session** 起的是另一个终端，而不是离开这个模式 | 本插件分段注册的 `newSession` 应答——开关会先把这个请求交给占着会话列的那一方 |
 | 侧边栏的行跟上终端里 `/rename` 改的名字 | 终端自己宣布的窗口标题，从本插件本来就在转发的字节里读到 |
-| 这些行前面的红点 | 本插件分段携带的 `tone` 与 `owns` 判别；侧边栏的圆点由 [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) 为所有已注册的模式统一绘制 |
+| 这些行前面的红点 | 本插件分段携带的 `tone` 与 `owns` 判别；侧边栏的圆点由 [omdsh-basemode](https://github.com/omdsh-plugins/omdsh-basemode) 为所有已注册的模式统一绘制 |
 
 **没有改动 harness 的任何东西，也没有重新实现终端的任何东西。** 屏幕上的就是 `@omdsh-plugins/omdsh-tui` 自己的前门——它的 transcript、工具卡片、`/resume`、它绑定的每一个键——因为本插件做的事就是启动那个程序并转发字节。
 
@@ -76,6 +76,8 @@ id 本身就是那份记录——会话存储旁边没有第二张表可以和�
 3. **这个项目最近的那段 Code 对话** —— 这就是在一台刚起来的 host 上按下 Code 该有的意思：回到手上的活，而不是一个空提示符。「最近」用的是侧边栏排序用的同一把尺，并且永远不取一段谁也没说过话的对话——被打开又走开的终端会留下这种空壳，里面没有任何可回去的东西。
 4. **一段新对话**，当这个项目一段都没有时。
 
+这四个答案问的是**哪个项目**，取自屏幕上那段对话——只有一个例外，而它正是这一节多出一段的原因。一段住在**任何项目之外**的对话，说不出任何终端能跑的目录：一段聊天归档在拥有它的那个插件自己的存储里，那儿没人干活。以前在这样一段对话旁边按 Code，终端就开在了那个文件夹里。现在它改为回到 Code 上次待的地方——这个页面自己在那个项目里活着的终端，没有就是那个项目最近的一段 Code 对话，用和第 3 条同样的「提议」方式——这也正是 Work 从一段聊天出发时遵循的规则。一个从没在任何地方开过 Code 的页面会落到下面的冷启动，而冷启动同样会跳过「里面的对话全都不在项目里」的那个分组。哪些对话属于这一类，由 [omdsh-basemode](https://github.com/omdsh-plugins/omdsh-basemode) 的 `inProject` 回答、由拥有它们的那个模式声明，所以这里没有任何代码知道它们当中哪个是 Chat。
+
 这个顺序就是全部的安全性论证，而第三个答案摆在这个位置是刻意的。浏览器看得见会话列表，但看不见一个正在跑的进程。刚开出来的对话在磁盘上还什么都没有，因此谈不上"最近"——一个凌驾于 host 活表之上的界面，就会在一个正在运行的 agent 头上把更旧的一段拉起来，而同一段对话的两份活副本会把各自的序号交织进同一个文件，直到这份日志再也读不出来为止。所以浏览器只**提议**（socket 上的 `resume=`），由 host 决定：只有当它在那个目录里什么都没跑时，才会接下这个提议。已经被某次事故弄成这样的日志并非没救：`pnpm run repair:sessions` 就是针对这个形状的修复工具，怎么跑写在[命令](#命令)里。
 
 ## New Session 起的是另一个终端
@@ -86,7 +88,7 @@ id 本身就是那份记录——会话存储旁边没有第二张表可以和�
 
 在第一轮对话落盘之前，这段新对话根本没有行——harness 里没有任何东西听说过它——所以侧边栏也没有哪一行可以高亮。那一轮落盘之后，行会自己出现，高亮也随之落上去。
 
-**选中状态**依然不会跟着过去，而且永远不会：一段 Code 对话是**被显示的，而不是被选中的**，因为把它变成运行时的当前会话，正是让这个 host 去恢复它的那个动作，而它的终端还在往那份日志里追加。动的是侧边栏的光标：本插件把终端正在驱动的那段对话作为模式系统的 `column` 发布出去，由 `omdsh-base` 把高亮画到那一行上——所以打开一段 Code 对话，光标就跟过去，而留在终端背后那段被选中的网页对话会让出高亮，直到你切回去。
+**选中状态**依然不会跟着过去，而且永远不会：一段 Code 对话是**被显示的，而不是被选中的**，因为把它变成运行时的当前会话，正是让这个 host 去恢复它的那个动作，而它的终端还在往那份日志里追加。动的是侧边栏的光标：本插件把终端正在驱动的那段对话作为模式系统的 `column` 发布出去，由 `omdsh-basemode` 把高亮画到那一行上——所以打开一段 Code 对话，光标就跟过去，而留在终端背后那段被选中的网页对话会让出高亮，直到你切回去。
 
 有两件事值得先知道，免得被它们吓一跳：
 
@@ -135,11 +137,11 @@ GitHub 仓库装上，并把那条 pnpm 构建白名单写好——裸的 `dsh p
 只要 profile 里已经有插件中心，它就在**设置 → 插件 → 插件中心**里这个插件的卡片
 上。
 
-[omdsh-base](https://github.com/omdsh-plugins/omdsh-base)——它注册进去的那个开关
+[omdsh-basemode](https://github.com/omdsh-plugins/omdsh-basemode)——它注册进去的那个开关
 ——已经发布，所以那一个按名字装：
 
 ```sh
-dsh plugin --profile web add @omdsh-plugins/omdsh-base
+dsh plugin --profile web add @omdsh-plugins/omdsh-basemode
 ```
 
 也可以从检出安装，这是尚未发布的构建要走的路。`dsh web` 启动前 `lib/` 必须存在——loader 直接 import `lib/index.js`，而按路径安装的包不会跑 `prepare`，没有任何环节替你构建：
@@ -149,7 +151,7 @@ pnpm install
 pnpm run build
 
 dsh plugin --profile web add "$PWD"           # 本插件
-dsh plugin --profile web add ../omdsh-base    # 它注册进去的那个开关
+dsh plugin --profile web add ../omdsh-basemode    # 它注册进去的那个开关
 ```
 
 它启动的终端住在**它自己的 profile** 里（默认 `omdsh-tui`），而那一个**只能从检出安装**：与这里点名的其他同伴不同，它不在本集合的 registry 里，所以没有 `@omdsh-plugins/omdsh-tui` 可加。按[那个仓库](https://github.com/omdsh-plugins/omdsh-tui#install)的说明装，那就是一个脚本：
@@ -174,7 +176,7 @@ Code 模式是把那个 profile 作为子进程**启动**，而不是组合它�
 dsh plugin --profile web remove @omdsh-plugins/omdsh-codemode
 ```
 
-没有 [omdsh-base](https://github.com/omdsh-plugins/omdsh-base) 时，profile 依然可以组合并启动，本插件的浏览器半边照常挂载、但什么都不做：`sessionModes` 是按服务名解析的，而它下面所有的注册都挂在一个等待该服务的受限 fiber 上。这正是预期的关闭状态——没有开关，第三个分段也就无处出现，Code 模式会让页面保持它进来时的样子。
+没有 [omdsh-basemode](https://github.com/omdsh-plugins/omdsh-basemode) 时，profile 依然可以组合并启动，本插件的浏览器半边照常挂载、但什么都不做：`sessionModes` 是按服务名解析的，而它下面所有的注册都挂在一个等待该服务的受限 fiber 上。这正是预期的关闭状态——没有开关，第三个分段也就无处出现，Code 模式会让页面保持它进来时的样子。
 
 这个关闭状态**不能**用顶层 `inject` 声明 `sessionModes` 来实现。cordis 对被注入的服务会无限期等待，而 Web 客户端在插件树静默后会扫一遍所有 loader entry，任何仍处于 `pending` 的都会让整个页面失败——于是"Code 模式没开"就变成了 `web boot: 1 entry did not activate`，是一个死掉的界面，而不是少了一个分段。这条规则对任何由别的插件发布的服务都成立，写在 [CONVENTIONS.zh.md](https://omdsh-plugins.github.io/conventions/#rule-9) 里。
 
