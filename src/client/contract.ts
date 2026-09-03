@@ -11,10 +11,12 @@
  */
 
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 // Type-only: pulls ui-layout's SlotMap merge (the seat this column takes)
 // into this program. A value import would be a purity error.
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+// Type-only: pulls `ctx.slots` (moved out of dsh-client-runtime onto the renderer).
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { Scope } from './api.ts'
 
 /** Injected face of the column: which conversation's workspace it is showing. */

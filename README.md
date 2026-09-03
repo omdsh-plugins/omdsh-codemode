@@ -60,7 +60,7 @@ The announcement is the trigger, never the answer: its text is the terminal's ow
 A terminal needs a **directory**, and a conversation is only one of the ways to name one. Three answers, in the order of how much the page already knows:
 
 1. **The conversation on screen** — the project it is grouped under, falling back to its own recorded directory.
-2. **The project the runtime itself would land in**, when nothing is open. `recentWorkspaceId` is the harness's own answer to "where were you", and the one it restores a conversation from; the top of the workspace list stands in when it names none.
+2. **The project whose conversations were last touched**, when nothing is open. Recency is the newest session `updatedAt` in a workspace (the same rule ui-workspace uses after 0.1.2 dropped `recentWorkspaceId`); the top of the workspace list stands in when none has been touched.
 3. **Wherever you say**, when no project is registered at all. Pressing **Code** on a fresh install opens the Host's directory picker, registers what you choose, and starts a terminal there — the same gesture the frame's own empty state offers under *Choose workspace*.
 
 The second and third answers are why this segment is live on a page that has nothing open. It used to report the first one only, which meant it was permanently greyed out on a fresh install — a state invisible for as long as [omdsh-chatmode](https://github.com/omdsh-plugins/omdsh-chatmode) was composed beside it, because its managed Chat workspace means a conversation is always open. Both happen on the **press** and never while deriving, so a page nobody pressed Code on starts no terminal and mints no conversation.

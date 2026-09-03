@@ -39,9 +39,18 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
     alias: [
       {
-        find: /^@deepseek-ai\/dsh-client-runtime\/client$/,
-        replacement: harnessSource('@deepseek-ai/dsh-client-runtime', 'src/client/index.ts'),
+        find: /^@deepseek-ai\/dsh-api-session-controller\/client$/,
+        replacement: harnessSource('@deepseek-ai/dsh-api-session-controller', 'src/client/index.ts'),
       },
+      {
+        find: /^@deepseek-ai\/dsh-api-workspace-controller\/client$/,
+        replacement: harnessSource('@deepseek-ai/dsh-api-workspace-controller', 'src/client/index.ts'),
+      },
+      {
+        find: /^@deepseek-ai\/dsh-client-store$/,
+        replacement: harnessSource('@deepseek-ai/dsh-client-store', 'src/index.ts'),
+      },
+
       {
         find: /^@deepseek-ai\/dsh-client-ui-primitives$/,
         replacement: harnessSource('@deepseek-ai/dsh-client-ui-primitives', 'src/index.ts'),

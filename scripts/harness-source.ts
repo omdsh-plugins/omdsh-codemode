@@ -37,7 +37,7 @@ const root = resolve(import.meta.dirname, '..')
 const PREFIX = 'harness-source'
 
 /** The harness release this plugin is pinned to when it builds from the registry. */
-const HARNESS_VERSION = '0.1.1-rc.2'
+const HARNESS_VERSION = '0.1.2-rc.1'
 
 /**
  * The framework is versioned on its own train, not the harness release's, so
@@ -48,10 +48,13 @@ const CORDIS_VERSION = '^4.0.1'
 /** Every harness package this plugin builds against, and where it lives in a checkout. */
 const HARNESS_PACKAGES: Readonly<Record<string, string>> = {
   '@deepseek-ai/cordis': join('vendor', 'cordis'),
+  '@deepseek-ai/dsh-api-session-controller': join('packages', 'api', 'session-controller'),
+  '@deepseek-ai/dsh-api-workspace-controller': join('packages', 'api', 'workspace-controller'),
   '@deepseek-ai/dsh-client-locale': join('packages', 'client', 'locale'),
-  '@deepseek-ai/dsh-client-runtime': join('packages', 'client', 'runtime'),
+  '@deepseek-ai/dsh-client-store': join('packages', 'client', 'store'),
   '@deepseek-ai/dsh-client-ui-layout': join('packages', 'client', 'ui-layout'),
   '@deepseek-ai/dsh-client-ui-primitives': join('packages', 'client', 'ui-primitives'),
+  '@deepseek-ai/dsh-client-ui-renderer': join('packages', 'client', 'ui-renderer'),
   '@deepseek-ai/dsh-client-ui-slots': join('packages', 'client', 'ui-slots'),
   '@deepseek-ai/dsh-host-webserver': join('packages', 'host', 'webserver'),
   '@deepseek-ai/dsh-invariants': join('packages', 'runtime-diagnostics', 'invariants'),

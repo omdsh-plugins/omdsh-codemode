@@ -32,10 +32,15 @@
  */
 
 import { createElement } from 'react'
-import type { ClientContext, ISessions, IWorkspaces, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { IWorkspaces } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { IconCodeOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+// Type-only: pulls `ctx.slots` (moved out of dsh-client-runtime onto the renderer).
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { isCodeSessionId } from '../code-session.ts'
 import type { CodeColumnInjected } from './contract.ts'
 import { CodeModeController } from './code-mode.ts'
@@ -152,7 +157,23 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
     enterCode: () => { modes.update(SEGMENT_ID, { active: true }) },
     clearSelection: () => { sessions.clear() },
     refreshSessions,
-    pickDirectory: () => workspaces.pickDirectory(),
+    pickDirectory: async () => {
+      // 0.1.2 moved the chooser onto `ctx.uiWorkspace`; older hosts still
+      // publish it on `workspaces`. The Remote namespace is the last door.
+      const ui = ctx.get('uiWorkspace') as { pickDirectory?: () => Promise<string | null> } | undefined
+      if (typeof ui?.pickDirectory === 'function') return ui.pickDirectory()
+      const legacy = workspaces as IWorkspaces & { pickDirectory?: () => Promise<string | null> }
+      if (typeof legacy.pickDirectory === 'function') return legacy.pickDirectory()
+      const remote = ctx.get('remote') as {
+        directoryPicker?: {
+          pick: () => Promise<{ ok: true; value: string | null } | { ok: false; error: { message: string } }>
+        }
+      } | undefined
+      const result = await remote?.directoryPicker?.pick()
+      if (result === undefined) throw new Error('omdsh-codemode: no directory picker on this surface')
+      if (!result.ok) throw new Error(`directory picker failed: ${result.error.message}`)
+      return result.value
+    },
     // The Host's canon for the path, which is what the workspace is keyed on;
     // an already-registered directory resolves to the same project rather than
     // a second one, so pressing Code twice on the same answer is idempotent.

@@ -2,9 +2,10 @@
 // The browser plugin body: one contributed segment, and the conversation
 // column it takes and gives back with that segment's active flag.
 import { describe, expect, it } from 'vitest'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SessionListState, WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { ModeSegmentRegistry } from '@omdsh-plugins/omdsh-basemode/src/client/mode-segments.ts'
 import { apply, COLUMN_PRIORITY, inject, isCodeSessionId, SEGMENT_ID } from '../src/client/index.ts'
 import type { Scope } from '../src/client/api.ts'
@@ -35,7 +36,7 @@ function bench(options: {
     ids: [current as never], byId: {}, current: current as never, phase: 'ready',
     subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
   } as SessionListState)
-  const workspaces = createSnapshotStore<WorkspaceListState>({
+  const workspaces = createSnapshotStore<WorkspaceSnapshot>({
     items: [{
       workspaceId: 'w1' as never,
       path: options.workspacePath ?? '/workspace/project',
@@ -45,7 +46,6 @@ function bench(options: {
       updatedAt: '2026-01-01T00:00:00.000Z',
     }],
     archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
-    baselinesReady: true, recentWorkspaceId: undefined,
   })
   const opened: string[] = []
   /** Directories registered as projects, in order — the cold start's one write. */

@@ -27,19 +27,18 @@ const ID = '@omdsh-plugins/omdsh-codemode'
 
 /**
  * The specifiers the shell seeds into the frozen module table. Mirrors
- * `@deepseek-ai/dsh-client-web/src/platform`, plus the documented
- * runtime-store exemption every UI plugin rides. Anything NOT listed here is
+ * `@deepseek-ai/dsh-client-web/src/platform`, plus `@deepseek-ai/dsh-client-store`, which 0.1.2 seeds as a platform module. Anything NOT listed here is
  * inlined: a `require()` the table cannot answer throws at factory time.
  */
 const CLIENT_EXTERNALS: readonly string[] = [
   'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-ui-slots',
   '@deepseek-ai/dsh-client-ui-primitives',
-  '@deepseek-ai/dsh-client-runtime/client',
+  '@deepseek-ai/dsh-client-store',
 ]
 
 /** Wire/type layers a client bundle may inline: no runtime identity to share. */
-const INLINE_SAFE = /^@deepseek-ai\/dsh-(host-apiproxy|session|llm|tools|brand|client-schema-form)(\/|$)/
+const INLINE_SAFE = /^(?:@deepseek-ai\/dsh-(?:file-reference|session|llm|tools|brand|deque|typert-protocol|util-crypto|util-values|util-workspace-path|client-schema-form)(?:\/|$)|@deepseek-ai\/dsh-token-meter\/client$|@deepseek-ai\/dsh-agent-presets\/display$)/
 /** Generated descriptor/codec contribution, likewise identity-free. */
 const GENERATED_REMOTE = /^@deepseek-ai\/dsh-[a-z0-9]+(?:-[a-z0-9]+)*\/remote$/
 

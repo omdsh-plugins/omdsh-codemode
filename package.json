@@ -1,7 +1,7 @@
 {
   "name": "@omdsh-plugins/omdsh-codemode",
   "description": "Code mode for the DeepSeek Harness web GUI: a third segment beside Chat and Work whose column is the harness's own terminal, running in the conversation's workspace",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -36,20 +36,21 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-layout",
-        "@deepseek-ai/dsh-client-locale"
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-api-workspace-controller"
       ],
       "platform": "web"
     },
     "plughub": {
       "displayName": {
         "": "Code Mode",
-        "zh": "代码模式"
+        "zh": "\u4ee3\u7801\u6a21\u5f0f"
       },
       "summary": {
         "": "A harness terminal in the conversation's workspace, beside Chat and Work.",
-        "zh": "在对话所属的工作区里开一个 harness 终端，与 Chat、Work 并列。"
+        "zh": "\u5728\u5bf9\u8bdd\u6240\u5c5e\u7684\u5de5\u4f5c\u533a\u91cc\u5f00\u4e00\u4e2a harness \u7ec8\u7aef\uff0c\u4e0e Chat\u3001Work \u5e76\u5217\u3002"
       },
       "category": "workspace",
       "docs": "https://github.com/omdsh-plugins/omdsh-codemode#readme",
@@ -89,27 +90,33 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-runtime": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-layout": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-host-webserver": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-invariants": ">=0.1.1-rc.2",
-    "@deepseek-ai/dsh-session": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-api-workspace-controller": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-locale": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-store": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-layout": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-renderer": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-host-webserver": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-invariants": ">=0.1.2-rc.1",
+    "@deepseek-ai/dsh-session": ">=0.1.2-rc.1",
     "@omdsh-plugins/omdsh-basemode": "*",
     "react": "^18.2.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": "0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-runtime": "0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-layout": "0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.1-rc.2",
-    "@deepseek-ai/dsh-host-webserver": "0.1.1-rc.2",
-    "@deepseek-ai/dsh-invariants": "0.1.1-rc.2",
-    "@deepseek-ai/dsh-session": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-api-workspace-controller": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-locale": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-store": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-layout": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-invariants": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-session": "0.1.2-rc.1",
     "@omdsh-plugins/omdsh-basemode": "^0.2.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.1.0",

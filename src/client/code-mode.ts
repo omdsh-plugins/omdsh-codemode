@@ -49,10 +49,11 @@
  * @module @omdsh-plugins/omdsh-codemode/src/client/code-mode
  */
 
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type {
-  ObservableSnapshot, SessionId, SessionListState, SnapshotStore, WorkspaceListState,
-} from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ObservableSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { WorkspaceSnapshot, WorkspaceView } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { isCodeSessionId, mintCodeSessionId } from '../code-session.ts'
 import type { Scope } from './api.ts'
 import type { ColumnScope } from './session-modes.ts'
@@ -62,7 +63,7 @@ export interface CodeModeDeps {
   /** The live session list (current selection, directories, recency). */
   readonly sessions: ObservableSnapshot<SessionListState>
   /** The live workspace list — which group a conversation is accounted under. */
-  readonly workspaces: ObservableSnapshot<WorkspaceListState>
+  readonly workspaces: ObservableSnapshot<WorkspaceSnapshot>
   /** Take the column for Code mode; the segment registry clears the others. */
   enterCode(): void
   /**
@@ -109,6 +110,36 @@ export interface CodeModeDeps {
    * @returns true unless some mode declared its conversations are not.
    */
   inProject(sessionId: string): boolean
+}
+
+/**
+ * The workspace whose conversations were last touched — the 0.1.2 replacement
+ * for the snapshot field `recentWorkspaceId`, which the workspace controller
+ * no longer publishes. Tie-breaks follow Host workspace order, matching
+ * ui-workspace's own `recentWorkspace`.
+ * @param workspaces - candidate groups, already filtered to usable projects.
+ * @param sessions - the live session list, keyed by id.
+ * @returns a workspace id, or undefined when the candidate list is empty.
+ */
+function mostRecentWorkspace(
+  workspaces: readonly WorkspaceView[],
+  sessions: SessionListState['byId'],
+): string | undefined {
+  let selected: string | undefined
+  let selectedTime = Number.NEGATIVE_INFINITY
+  for (const workspace of workspaces) {
+    let latest = Number.NEGATIVE_INFINITY
+    for (const sessionId of workspace.sessionIds) {
+      const session = sessions[sessionId]
+      if (session !== undefined) latest = Math.max(latest, session.updatedAt)
+    }
+    if (latest === Number.NEGATIVE_INFINITY) latest = Date.parse(workspace.createdAt)
+    if (selected === undefined || latest > selectedTime) {
+      selected = workspace.workspaceId
+      selectedTime = latest
+    }
+  }
+  return selected
 }
 
 /** Derives the terminal's scope and follows Code conversations into the column. */
@@ -430,16 +461,16 @@ export class CodeModeController {
   /**
    * The project a terminal runs in when no conversation names one.
    *
-   * The runtime's own "most recently active" answer first — the project the
-   * user was last in, which is what pressing Code with nothing open should come
-   * back to — and the top of the workspace list under it, because that is the
-   * sidebar's first group and so where the user would have clicked anyway.
+   * The workspace whose conversations were last touched first — the project
+   * the user was last in, which is what pressing Code with nothing open should
+   * come back to — and the top of the workspace list under it, because that is
+   * the sidebar's first group and so where the user would have clicked anyway.
    * @returns its workspace id, or undefined when no project is registered.
    */
   private defaultWorkspace(): string | undefined {
-    const { items, recentWorkspaceId } = this.deps.workspaces.getSnapshot()
+    const { items } = this.deps.workspaces.getSnapshot()
     const usable = items.filter(item => item.path !== '')
-    return usable.find(item => item.workspaceId === recentWorkspaceId)?.workspaceId
+    return mostRecentWorkspace(usable, this.deps.sessions.getSnapshot().byId)
       ?? usable[0]?.workspaceId
   }
 
@@ -464,9 +495,9 @@ export class CodeModeController {
    * @returns its workspace id, or undefined when no project is registered.
    */
   private defaultProject(): string | undefined {
-    const { items, recentWorkspaceId } = this.deps.workspaces.getSnapshot()
+    const { items } = this.deps.workspaces.getSnapshot()
     const usable = items.filter(item => item.path !== '' && this.isProject(item.sessionIds))
-    return usable.find(item => item.workspaceId === recentWorkspaceId)?.workspaceId
+    return mostRecentWorkspace(usable, this.deps.sessions.getSnapshot().byId)
       ?? usable[0]?.workspaceId
   }
 
@@ -548,7 +579,7 @@ export class CodeModeController {
    */
   private readScope(
     sessions: SessionListState,
-    workspaces: WorkspaceListState,
+    workspaces: WorkspaceSnapshot,
     current: SessionId | undefined,
   ): Scope | undefined {
     if (current === undefined) return undefined
@@ -597,7 +628,7 @@ export class CodeModeController {
    */
   private scopeInLastProject(
     sessions: SessionListState,
-    workspaces: WorkspaceListState,
+    workspaces: WorkspaceSnapshot,
   ): Scope | undefined {
     const cwd = this.lastProject
     if (cwd === undefined) return undefined
@@ -632,7 +663,7 @@ export class CodeModeController {
   private recentIn(
     cwd: string,
     sessions: SessionListState,
-    workspaces: WorkspaceListState,
+    workspaces: WorkspaceSnapshot,
   ): string | undefined {
     const grouped = new Set<string>(workspaces.items.find(item => item.path === cwd)?.sessionIds ?? [])
     let best: { id: string; at: number } | undefined

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 // Which terminal Code mode shows, and when a Code conversation takes the column.
 import { describe, expect, it, vi } from 'vitest'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SessionListState, WorkspaceListState } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { CodeModeController } from '../src/client/code-mode.ts'
 import { isCodeSessionId } from '../src/code-session.ts'
 
@@ -36,13 +37,11 @@ function sessionList(
 /**
  * A workspace list snapshot.
  * @param items - the projects, in the sidebar's own display order.
- * @param recent - the runtime's most-recently-active project, when it has one.
  * @returns the snapshot.
  */
 function workspaceList(
   items: { path: string; sessionIds: string[] }[],
-  recent?: string,
-): WorkspaceListState {
+): WorkspaceSnapshot {
   return {
     items: items.map((item, index) => ({
       workspaceId: `w${String(index)}`,
@@ -56,15 +55,13 @@ function workspaceList(
     state: 'idle',
     phase: 'ready',
     error: null,
-    baselinesReady: true,
-    recentWorkspaceId: recent,
-  } as unknown as WorkspaceListState
+  } as unknown as WorkspaceSnapshot
 }
 
 /** The controller over stores a spec can push new snapshots into. */
 function bench(options: {
   sessions?: SessionListState
-  workspaces?: WorkspaceListState
+  workspaces?: WorkspaceSnapshot
   /** What the Host's directory picker answers; null is the cancelled dialog. */
   picked?: string | null
   /** A picker the Host could not open, or a directory it refused to register. */
@@ -372,7 +369,7 @@ describe('a conversation that is in no project', () => {
       workspaces: workspaceList([
         { path: '/chat-store', sessionIds: ['chat-1'] },
         { path: '/repo', sessionIds: [] },
-      ], 'w0'),
+      ]),
       outsideProjects: ['chat-1'],
     })
     expect(b.controller.ensureScope()).toBe(true)
@@ -414,12 +411,15 @@ describe('pressing Code with nothing open', () => {
     expect(b.controller.scope.getSnapshot()).toBe(before)
   })
 
-  it('starts in the project the runtime itself would land in', () => {
-    // `recentWorkspaceId` is the runtime's own answer to "where were you", and
-    // the one it uses to pick the conversation to restore — so a terminal
-    // started from nothing lands in the same place the rest of the app would.
+  it('starts in the project whose conversations were last touched', () => {
+    // 0.1.2 dropped `recentWorkspaceId`; recency is the newest `updatedAt`
+    // among a group's conversations, matching ui-workspace's own rule.
     const b = bench({
-      workspaces: workspaceList([{ path: '/repo', sessionIds: [] }, { path: '/other', sessionIds: [] }], 'w1'),
+      workspaces: workspaceList([
+        { path: '/repo', sessionIds: ['old'] },
+        { path: '/other', sessionIds: ['new'] },
+      ]),
+      sessions: sessionList([summary('old', '/repo', 1), summary('new', '/other', 100)]),
     })
     expect(b.controller.ensureScope()).toBe(true)
     expect(b.controller.scope.getSnapshot()?.cwd).toBe('/other')
