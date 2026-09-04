@@ -4,7 +4,8 @@
 // terminal back on screen in whatever mode the user pressed it in.
 import { describe, expect, it, vi } from 'vitest'
 import {
-  ATTACH_SCHEDULE_MS, RECONCILE_SCHEDULE_MS, WorkspaceAccountant,
+  ATTACH_SCHEDULE_MS, conversationBegunFromLog, logShowsTurn, RECONCILE_SCHEDULE_MS,
+  WorkspaceAccountant,
   type AccountantClock, type WorkspaceFace, type WorkspaceRegistryFace,
 } from '../src/workspace-account.ts'
 
@@ -376,5 +377,77 @@ describe('WorkspaceAccountant', () => {
       expect(RECONCILE_SCHEDULE_MS[0]).toBeLessThanOrEqual(1_000)
       expect([...RECONCILE_SCHEDULE_MS]).toEqual([...RECONCILE_SCHEDULE_MS].sort((a, b) => a - b))
     })
+
+    it('accounts for a begun Code conversation nobody attached', async () => {
+      // The whole bug this sweep now also undoes: the terminal wrote a real
+      // conversation, the sidebar listed it, and it sat in Ungrouped because
+      // the probe that was supposed to attach it could never answer.
+      const registry = registryDouble()
+      const accountant = new WorkspaceAccountant(
+        () => registry.registry,
+        begunDouble({ answer: true }).probe,
+        { catalog: () => ({ list: async () => [{ id: 'code-session-1', cwd: '/repo' }] }) },
+      )
+      await accountant.reconcileAccounts()
+      expect(registry.attached).toEqual(['code-session-1'])
+    })
+
+    it('does not claim a web conversation, or one in no project', async () => {
+      const registry = registryDouble()
+      const accountant = new WorkspaceAccountant(
+        () => registry.registry,
+        begunDouble({ answer: true }).probe,
+        {
+          catalog: () => ({
+            list: async () => [
+              { id: 'session-web', cwd: '/repo' },
+              { id: 'code-session-1', cwd: '/elsewhere' },
+            ],
+          }),
+        },
+      )
+      await accountant.reconcileAccounts()
+      expect(registry.attaches).toBe(0)
+    })
+  })
+
+  it('attaches on a known beginning even when the probe cannot answer', async () => {
+    // A terminal renaming its window is the turn; the log the other process
+    // is still flushing is why inspect may reject in that same moment.
+    const registry = registryDouble()
+    const accountant = new WorkspaceAccountant(
+      () => registry.registry, begunDouble({ answer: undefined }).probe, [1], fakeClock(),
+    )
+    expect(await accountant.settleNow('code-session-1', '/repo')).toBe(false)
+    expect(await accountant.settleNow('code-session-1', '/repo', true)).toBe(true)
+    expect(registry.attached).toEqual(['code-session-1'])
+  })
+})
+
+describe('logShowsTurn', () => {
+  it('is true once a turn has started or ended', () => {
+    expect(logShowsTurn([{ type: 'session' }, { type: 'turn/start' }])).toBe(true)
+    expect(logShowsTurn([{ type: 'turn/end' }])).toBe(true)
+  })
+
+  it('is false for a header-only terminal log', () => {
+    expect(logShowsTurn([
+      { type: 'session' },
+      { type: 'permission/preset' },
+      { type: 'sandbox/mode' },
+      { type: 'approval/policy' },
+    ])).toBe(false)
+  })
+})
+
+describe('conversationBegunFromLog', () => {
+  it('reads the log, and treats a missing one as unanswerable', async () => {
+    const probe = conversationBegunFromLog(async (sessionId) => {
+      if (sessionId === 'missing') throw new Error('no log')
+      return sessionId === 'begun' ? [{ type: 'turn/start' }] : [{ type: 'session' }]
+    })
+    expect(await probe('begun')).toBe(true)
+    expect(await probe('blank')).toBe(false)
+    expect(await probe('missing')).toBeUndefined()
   })
 })

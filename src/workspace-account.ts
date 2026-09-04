@@ -37,6 +37,16 @@
  * {@link WorkspaceAccountant.reconcileAccounts} for the ones left behind
  * before this rule existed).
  *
+ * **Why the log, not the projection cache.** An earlier probe asked the
+ * cache for `sessionListMetadata.blank`, which is the bit the web host folds
+ * for its own conversations. The terminal is another process and writes a
+ * different projector set — title, `sessionStats`, no `sessionListMetadata`
+ * — and the cache API this plugin invented (`coldSnapshot(sessionId)`) is
+ * not the one the harness publishes. Every attempt therefore came back
+ * unanswerable, and every Code conversation stayed in Ungrouped. The stored
+ * log is the one file both processes share; `turn/start` is the same fact
+ * `blank === false` names.
+ *
  * **Why it retries.** Beginning happens on the user's timing, not the
  * terminal's: the conversation exists from the first keystroke's turn, which
  * may be seconds after the terminal opened or minutes. So attaching cannot
@@ -97,18 +107,108 @@ export interface WorkspaceFace {
  * Whether one conversation has BEGUN — whether a turn has ever run in it.
  *
  * A function rather than a service, for the reason the registry is a resolver:
- * the answer lives behind a projection this plugin reads by name, and the
+ * the answer lives behind persistence this plugin reads by name, and the
  * accounting rule is worth testing without composing one.
  *
  * Three answers, not two. `undefined` is "this deployment cannot tell right
- * now" — nothing persisted yet, no such projection composed, a storage fault —
- * and it is deliberately neither of the others: not a reason to account for a
+ * now" — nothing persisted yet, no store composed, a storage fault — and it
+ * is deliberately neither of the others: not a reason to account for a
  * conversation, and not a reason to take an existing account away.
  * @param sessionId - the conversation being asked about.
  * @returns true when a turn has run, false when demonstrably none has, and
  * undefined when the question has no answer here.
  */
 export type ConversationBegun = (sessionId: string) => Promise<boolean | undefined>
+
+/**
+ * One persisted conversation, as the accountant lists them for the startup
+ * sweep. Only `id` and `cwd` — enough to ask {@link WorkspaceAccountant.settleNow}
+ * about a conversation this process did not start.
+ */
+export interface PersistedSessionFace {
+  /** The session id. */
+  readonly id: string
+  /** The directory its header recorded. */
+  readonly cwd: string
+}
+
+/**
+ * The session store as this plugin lists it — another structural mirror.
+ * `@deepseek-ai/dsh-session-persistence` publishes `sessionPersistence`; a
+ * composition without it has no cold conversations to claim, so the sweep
+ * that puts already-begun Code rows in their project is skipped rather than
+ * fatal.
+ */
+export interface SessionCatalogFace {
+  /**
+   * Every materialized session header this host can see.
+   * @returns the sessions; a fault is the caller's to contain.
+   */
+  list(): Promise<readonly PersistedSessionFace[]>
+}
+
+/**
+ * Whether a stored log shows a turn has run.
+ *
+ * `turn/start` (or its matching `turn/end`) is the frame's own `blank ===
+ * false`: something was said, New Session must not reuse this conversation.
+ * A terminal that only wrote its header — permission events, no turn — is
+ * the other answer, and is why this looks at the log rather than at the
+ * projection cache. The terminal is another process and writes a different
+ * projector set; its cache row has no `sessionListMetadata`, which is the
+ * field an earlier probe required and the reason every Code conversation
+ * stayed in Ungrouped.
+ * @param events - the session's stored events, in any order.
+ * @returns true when a turn has started or ended.
+ */
+export function logShowsTurn(events: readonly { type?: string }[]): boolean {
+  return events.some(event => event.type === 'turn/start' || event.type === 'turn/end')
+}
+
+/**
+ * The begun probe, answered from a stored log rather than from a projection
+ * this host may not have folded.
+ * @param inspect - load one conversation's events; a rejection is unanswerable.
+ * @returns the probe.
+ */
+export function conversationBegunFromLog(
+  inspect: (sessionId: string) => Promise<readonly { type?: string }[]>,
+): ConversationBegun {
+  return async (sessionId: string) => {
+    try {
+      return logShowsTurn(await inspect(sessionId))
+    } catch {
+      return undefined
+    }
+  }
+}
+
+/**
+ * Whether the third constructor argument is an options bag rather than a
+ * delay list. `Array.isArray` does not narrow a `readonly number[]` union
+ * under the compiler this package uses, so the guard is written out.
+ * @param value - the third constructor argument.
+ * @returns true for {@link AccountantOptions}.
+ */
+function isAccountantOptions(
+  value: readonly number[] | AccountantOptions,
+): value is AccountantOptions {
+  return !Array.isArray(value)
+}
+
+/** Optional wiring the positional constructor also accepts as its third argument. */
+export interface AccountantOptions {
+  /** Attempt delays; see {@link ATTACH_SCHEDULE_MS}. */
+  schedule?: readonly number[]
+  /** Timer source, replaced by specs. */
+  clock?: AccountantClock
+  /**
+   * Lists persisted sessions so the startup sweep can attach begun Code
+   * conversations that an earlier probe never accounted. Absent, the sweep
+   * only detaches — the behaviour before this catalog existed.
+   */
+  catalog?: () => SessionCatalogFace | undefined
+}
 
 /**
  * Delays before each attach attempt, in milliseconds.
@@ -168,6 +268,9 @@ export class WorkspaceAccountant {
   /** The pending attempt per session, so coming back re-arms rather than doubles. */
   private readonly runs = new Map<string, unknown>()
   private readonly pending = new Set<unknown>()
+  private readonly schedule: readonly number[]
+  private readonly clock: AccountantClock
+  private readonly catalog: () => SessionCatalogFace | undefined
   private disposed = false
 
   /**
@@ -181,15 +284,27 @@ export class WorkspaceAccountant {
    * @param begun - whether a conversation has had a turn; see
    * {@link ConversationBegun}. A deployment that cannot answer keeps the
    * behaviour this module had before the question existed.
-   * @param schedule - attempt delays; see {@link ATTACH_SCHEDULE_MS}.
-   * @param clock - timer source, replaced by specs.
+   * @param scheduleOrOptions - attempt delays, or {@link AccountantOptions}
+   * when the startup sweep also needs a session catalog.
+   * @param clock - timer source, replaced by specs; ignored when the third
+   * argument is an options bag.
    */
   constructor(
     private readonly registry: () => WorkspaceRegistryFace | undefined,
     private readonly begun: ConversationBegun,
-    private readonly schedule: readonly number[] = ATTACH_SCHEDULE_MS,
-    private readonly clock: AccountantClock = PROCESS_CLOCK,
-  ) {}
+    scheduleOrOptions: readonly number[] | AccountantOptions = ATTACH_SCHEDULE_MS,
+    clock: AccountantClock = PROCESS_CLOCK,
+  ) {
+    if (isAccountantOptions(scheduleOrOptions)) {
+      this.schedule = scheduleOrOptions.schedule ?? ATTACH_SCHEDULE_MS
+      this.clock = scheduleOrOptions.clock ?? PROCESS_CLOCK
+      this.catalog = scheduleOrOptions.catalog ?? (() => undefined)
+    } else {
+      this.schedule = scheduleOrOptions
+      this.clock = clock
+      this.catalog = () => undefined
+    }
+  }
 
   /**
    * Account for one Code session under the workspace at `cwd`, once it has
@@ -226,9 +341,13 @@ export class WorkspaceAccountant {
    * conversation begins, and a caller that already knows it has just found it.
    * @param sessionId - the Code session.
    * @param cwd - the directory it ran in.
+   * @param knownBegun - the caller already saw a turn (a terminal renaming
+   * its window after the greeting). Wins over a probe that cannot answer —
+   * the log the other process is still flushing is why the probe is silent,
+   * not why the row should wait.
    * @returns whether the session is now accounted.
    */
-  async settleNow(sessionId: string, cwd: string): Promise<boolean> {
+  async settleNow(sessionId: string, cwd: string, knownBegun = false): Promise<boolean> {
     const registry = this.registry()
     if (registry === undefined || this.disposed) return false
     try {
@@ -237,7 +356,7 @@ export class WorkspaceAccountant {
       // not group, and a row there would have nowhere to live.
       if (workspace === undefined) return false
       const accounted = workspace.sessionIds.includes(sessionId)
-      const begun = await this.begun(sessionId)
+      const begun = knownBegun ? true : await this.begun(sessionId)
       if (begun === false) {
         if (accounted) await workspace.detachSession(sessionId)
         return false
@@ -308,6 +427,24 @@ export class WorkspaceAccountant {
           // One refused write is one grouping left wrong, not a sweep abandoned.
         }
       }
+    }
+    // The other direction: begun Code conversations that nobody attached.
+    // The probe this class used to ask (`sessionListMetadata.blank`) is a
+    // projector the terminal process does not write, so every conversation
+    // it started was left in Ungrouped even after a turn. Claiming them
+    // here is what a restart owes the sidebar, not a new rule.
+    const catalog = this.catalog()
+    if (catalog === undefined || this.disposed) return
+    let persisted: readonly PersistedSessionFace[]
+    try {
+      persisted = await catalog.list()
+    } catch {
+      return
+    }
+    for (const session of persisted) {
+      if (this.disposed) return
+      if (!isCodeSessionId(session.id) || session.cwd === '') continue
+      await this.settleNow(session.id, session.cwd)
     }
   }
 

@@ -31,7 +31,8 @@ import { remoteResolver, type RemoteWorkspaceFace } from './remote.ts'
 import { ProjectionRefolder, type ProjectionCacheFace } from './title-refold.ts'
 import { isTrustedRequest } from './trust-fence.ts'
 import {
-  WorkspaceAccountant, type ConversationBegun, type WorkspaceRegistryFace,
+  conversationBegunFromLog, WorkspaceAccountant,
+  type SessionCatalogFace, type WorkspaceRegistryFace,
 } from './workspace-account.ts'
 import { CodeError, messageOf } from './wire.ts'
 
@@ -52,9 +53,13 @@ export type { RemdevFace, RemoteWorkspaceFace, ResolveRemote } from './remote.ts
 export { readOscTitle } from './osc-title.ts'
 export { ProjectionRefolder, REFOLD_SCHEDULE_MS } from './title-refold.ts'
 export type { ProjectionCacheFace, RefoldClock } from './title-refold.ts'
-export { ATTACH_SCHEDULE_MS, RECONCILE_SCHEDULE_MS, WorkspaceAccountant } from './workspace-account.ts'
+export {
+  ATTACH_SCHEDULE_MS, conversationBegunFromLog, logShowsTurn, RECONCILE_SCHEDULE_MS,
+  WorkspaceAccountant,
+} from './workspace-account.ts'
 export type {
-  AccountantClock, ConversationBegun, WorkspaceFace, WorkspaceRegistryFace,
+  AccountantClock, AccountantOptions, ConversationBegun, PersistedSessionFace,
+  SessionCatalogFace, WorkspaceFace, WorkspaceRegistryFace,
 } from './workspace-account.ts'
 export { CodeError } from './wire.ts'
 
@@ -143,7 +148,24 @@ export function apply(ctx: Context, config: Config = {}): void {
   // read at the moment a terminal is wanted.
   const resolveRemote = remoteResolver(name => ctx.get(name))
 
-  const accountant = new WorkspaceAccountant(workspaceRegistry, conversationBegun(projectionCache))
+  // Persistence is resolved late for the same reason as the registry: it
+  // publishes after its storage backend starts, and a composition without
+  // it has no cold conversations to group. The probe reads the log the
+  // terminal actually wrote — `turn/start` — rather than a projection the
+  // web host folds. The terminal is another process and does not write
+  // `sessionListMetadata`, which is why every Code row used to stay in
+  // Ungrouped after a turn.
+  const sessionPersistence = (): SessionPersistenceFace | undefined =>
+    ctx.get('sessionPersistence') as unknown as SessionPersistenceFace | undefined
+  const accountant = new WorkspaceAccountant(
+    workspaceRegistry,
+    conversationBegunFromLog(async (sessionId) => {
+      const store = sessionPersistence()
+      if (store === undefined) throw new Error('omdsh-codemode: session persistence is not published')
+      return (await store.inspect(sessionId)).events
+    }),
+    { catalog: sessionCatalog(sessionPersistence) },
+  )
 
   const terminals = new HarnessTerminalRegistry(
     command,
@@ -156,7 +178,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       // conversation began — and beginning is exactly what its workspace
       // account is waiting on, so settle it here rather than leaving the row
       // to the next scheduled attempt, which by then can be 90 seconds away.
-      void accountant.settleNow(terminal.sessionId, terminal.cwd)
+      void accountant.settleNow(terminal.sessionId, terminal.cwd, true)
     },
     (cwd) => {
       const remote = resolveRemote(cwd)
@@ -177,7 +199,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   ctx.effect(() => {
     accountant.reconcileSoon()
     return () => { accountant.dispose() }
-  }, 'omdsh-codemode: unaccount Code conversations that never began')
+  }, 'omdsh-codemode: group begun Code conversations, unaccount those that never began')
 
   /**
    * The directory a terminal runs in.
@@ -388,37 +410,45 @@ async function settle(
 }
 
 /**
- * Whether a conversation has begun, as this host can answer it: from the
- * projection the session list's own `blank` bit is folded from.
- *
- * The cache rather than the log, because it is built for this question — a
- * cold read that folds the stored checkpoint plus the tail after it, never the
- * whole log — and because agreeing with `session.list` is the entire point:
- * `blank` is the bit the frame's New Session reuses a conversation on, so an
- * accounting rule derived from anything else would be a second opinion about
- * the same word.
- *
- * Three outcomes, deliberately (see {@link ConversationBegun}). A conversation
- * with no persisted log at all is one the terminal has not written yet, and the
- * cache reports that as a rejection — unanswerable rather than unbegun, since
- * there is nothing there to account for either way.
- * @param cache - resolves the projection cache, or undefined without one.
- * @returns the probe.
+ * The persistence service as this plugin lists and inspects it. A structural
+ * mirror: the concrete type lives behind `sessionPersistence`, and a
+ * composition without it must leave Code mode working rather than fail to
+ * install.
  */
-function conversationBegun(cache: () => ProjectionCacheFace | undefined): ConversationBegun {
-  return async (sessionId: string) => {
-    const projections = cache()
-    if (projections === undefined) return undefined
-    let values: Record<string, unknown>
-    try {
-      values = (await projections.coldSnapshot(sessionId)).values
-    } catch {
-      return undefined
+interface SessionPersistenceFace {
+  /**
+   * Read one conversation's stored events without publishing it.
+   * @param sessionId - the conversation.
+   * @returns its events; rejects when the session has no log yet.
+   */
+  inspect(sessionId: string): Promise<{ events: readonly { type: string }[] }>
+  /**
+   * Lightweight listing from metadata, without a full-log parse.
+   * @returns one header per materialized session.
+   */
+  list(): Promise<readonly { id: string; cwd?: string }[]>
+}
+
+/**
+ * The session catalog the accountant's startup sweep reads, when persistence
+ * has published.
+ * @param persistence - resolves the store, or undefined without one.
+ * @returns the catalog resolver.
+ */
+function sessionCatalog(
+  persistence: () => SessionPersistenceFace | undefined,
+): () => SessionCatalogFace | undefined {
+  return () => {
+    const store = persistence()
+    if (store === undefined) return undefined
+    return {
+      list: async () => {
+        const headers = await store.list()
+        return headers.flatMap(header => {
+          if (header.cwd === undefined || header.cwd === '') return []
+          return [{ id: header.id, cwd: header.cwd }]
+        })
+      },
     }
-    const metadata = values.sessionListMetadata
-    // Absent means the projection is not composed here — a deployment with no
-    // session list to speak of. Nothing to disagree with, so nothing to say.
-    if (metadata === null || typeof metadata !== 'object') return undefined
-    return (metadata as { blank?: unknown }).blank === false
   }
 }
