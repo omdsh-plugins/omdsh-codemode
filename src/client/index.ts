@@ -228,6 +228,26 @@ function mountMode(ctx: ClientContext, modes: SessionModes): void {
   })
   ctx.effect(() => () => { titles.dispose() }, 'omdsh-codemode: terminal title sync')
 
+  // The host may fold a Code title a beat after this page's first baseline,
+  // so a row that booted as the project basename needs a later look without
+  // waiting for another OSC write. Armed once the list is ready; already-
+  // titled rows are skipped.
+  ctx.effect(() => {
+    let armed = false
+    const catchUp = (): void => {
+      if (armed) return
+      const list = sessions.list.getSnapshot()
+      if (list.phase !== 'ready') return
+      armed = true
+      for (const id of list.ids) {
+        if (isCodeSessionId(id) && list.byId[id]?.title === undefined) titles.catchUp(id)
+      }
+    }
+    const unsubscribe = sessions.list.subscribe(catchUp)
+    catchUp()
+    return unsubscribe
+  }, 'omdsh-codemode: catch up untitled Code rows')
+
   const t = ctx.locale.bind(NS)
   /**
    * The chord this segment teaches. Empty unless a keybinding layer is composed

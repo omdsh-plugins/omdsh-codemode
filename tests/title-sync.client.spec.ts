@@ -38,12 +38,29 @@ function bench(listed: Record<string, string | undefined> = {}) {
 }
 
 describe('a terminal announcing its title', () => {
-  it('says nothing on the first announcement: that is the terminal saying hello', () => {
+  it('says nothing on the product greeting: that is the terminal saying hello', () => {
     // Every terminal states a title when it starts, and a reconnect replays
     // that write with the rest of the transcript. Entering Code mode must not
     // cost a session-list read.
     const b = bench()
-    b.sync.announced('code-session-a', 'proj — DeepSeek Harness')
+    b.sync.announced('code-session-a', 'DeepSeek Harness')
+    b.tick()
+    expect(b.refresh).not.toHaveBeenCalled()
+  })
+
+  it('re-reads when the first announcement already names the conversation and the list has none', () => {
+    // A pty read can deliver the greeting and the generated name together;
+    // only the last is visible, and treating it as "first, therefore hello"
+    // would leave the sidebar on the project basename.
+    const b = bench()
+    b.sync.announced('code-session-a', 'Unclear question — DeepSeek Harness')
+    b.tick()
+    expect(b.refresh).toHaveBeenCalledOnce()
+  })
+
+  it('says nothing on a reconnect that replays a name the list already has', () => {
+    const b = bench({ 'code-session-a': 'Unclear question' })
+    b.sync.announced('code-session-a', 'Unclear question — DeepSeek Harness')
     b.tick()
     expect(b.refresh).not.toHaveBeenCalled()
   })
@@ -135,5 +152,19 @@ describe('a terminal announcing its title', () => {
     expect([...TITLE_REFRESH_SCHEDULE_MS]).toEqual([1_000, 6_000, 15_000])
     expect(TITLE_REFRESH_SCHEDULE_MS.every((delay, index, all) =>
       index === 0 || delay > (all[index - 1] as number))).toBe(true)
+  })
+
+  it('re-reads a conversation the list still has no title for', () => {
+    const b = bench()
+    b.sync.catchUp('code-session-a')
+    b.tick()
+    expect(b.refresh).toHaveBeenCalledOnce()
+  })
+
+  it('does not re-read a conversation the list already named', () => {
+    const b = bench({ 'code-session-a': 'Greeting' })
+    b.sync.catchUp('code-session-a')
+    b.tick()
+    expect(b.refresh).not.toHaveBeenCalled()
   })
 })

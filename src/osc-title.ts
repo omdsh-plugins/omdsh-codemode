@@ -35,6 +35,26 @@ const BEL = String.fromCharCode(0x07)
 const OSC_TITLE = new RegExp(`${ESC}\\](?:0|2);([^${BEL}${ESC}]*)(?:${BEL}|${ESC}\\\\)`, 'gu')
 
 /**
+ * The TUI's named-session window title is `<session title> — <program>`.
+ * The greeting is the product name alone, with no mark.
+ */
+const SESSION_TITLE_MARK = ' — '
+
+/**
+ * Whether a window title already names the conversation, not just the program.
+ *
+ * Used to tell a greeting (`DeepSeek Harness`) from a generated or `/rename`d
+ * title (`Unclear question — DeepSeek Harness`). A pty read can deliver both
+ * in one chunk; only the last announcement is visible, and treating that as
+ * "the first title, therefore a greeting" would drop the rename.
+ * @param windowTitle - the announced title, verbatim.
+ * @returns true when the string carries a session name.
+ */
+export function namesConversation(windowTitle: string): boolean {
+  return windowTitle.includes(SESSION_TITLE_MARK)
+}
+
+/**
  * The last window title announced in a run of terminal output.
  *
  * The LAST, because a scan of accumulated output can span several

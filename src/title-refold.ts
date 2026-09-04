@@ -17,6 +17,11 @@
  * exactly the row `session.list` serves. So this module asks for that read at
  * the moment a terminal says its title changed.
  *
+ * The harness API is `coldSnapshot(meta, inheritedEventCount, events)`, not
+ * `coldSnapshot(sessionId)`. {@link projectionCacheFromHost} is the adapter
+ * that inspects the shared log and calls the real method — without it every
+ * rename is swallowed and the sidebar keeps the project basename.
+ *
  * **Why a schedule.** The terminal makes the rename durable on its own timing
  * — the log flush and the cache write are write-behind, a few seconds or the
  * next turn boundary — so a read fired the instant the title is announced can
@@ -40,6 +45,126 @@ export interface ProjectionCacheFace {
    * @returns its projected values, cut at the stored log end.
    */
   coldSnapshot(sessionId: string): Promise<{ asOfSeq: number; values: Record<string, unknown> }>
+}
+
+/**
+ * One stored session header, as the host cache's cold read needs it.
+ * Structural: `sessionPersistence.inspect` already returns this shape.
+ */
+export interface StoredSessionMeta {
+  readonly id: string
+  readonly createdAt: number
+  readonly isSeeded: boolean
+  readonly cwd?: string
+}
+
+/**
+ * Persistence as the adapter inspects it — the same `inspect` the workspace
+ * accountant already uses, widened to the header and inherited cut the cache
+ * asks for.
+ */
+export interface SessionInspectionFace {
+  /**
+   * Read one conversation's stored header and events without publishing it.
+   * @param sessionId - the conversation.
+   * @returns its identity and log; rejects when the session has no log yet.
+   */
+  inspect(sessionId: string): Promise<{
+    meta: StoredSessionMeta
+    inheritedEventCount: number
+    events: readonly unknown[]
+  }>
+}
+
+/**
+ * The harness cache as it actually publishes.
+ *
+ * `coldSnapshot` takes the stored header and the log, not a session id. The
+ * invented `coldSnapshot(sessionId)` this plugin used to call does not exist,
+ * so every rename was a thrown TypeError the refolder swallowed.
+ */
+export interface HostProjectionCacheFace {
+  /**
+   * The zero-I/O listing read: whole values from this process's cache table.
+   * @param meta - the listed session's header.
+   * @param inheritedEventCount - exact inherited prefix length.
+   * @returns the cut, or undefined when no usable row exists.
+   */
+  cachedSnapshot(
+    meta: StoredSessionMeta,
+    inheritedEventCount: number,
+  ): { asOfSeq: number; values: Record<string, unknown> } | undefined
+  /**
+   * Refold one session from its complete log and write the row back.
+   * @param meta - the stored session header.
+   * @param inheritedEventCount - exact inherited prefix length.
+   * @param events - the session's complete log, in seq order.
+   * @returns the projection cut at the log end.
+   */
+  coldSnapshot(
+    meta: StoredSessionMeta,
+    inheritedEventCount: number,
+    events: readonly unknown[],
+  ): { asOfSeq: number; values: Record<string, unknown> }
+}
+
+/**
+ * Adapt the harness cache to {@link ProjectionCacheFace}.
+ *
+ * The refolder and its specs stay on `coldSnapshot(sessionId)`. This is what
+ * the host half actually calls: inspect the shared log, then fold it.
+ * @param cache - resolves the harness cache, or undefined without one.
+ * @param persist - resolves persistence, or undefined without one.
+ * @returns a resolver the refolder can take; undefined while either service
+ * has not published.
+ */
+export function projectionCacheFromHost(
+  cache: () => HostProjectionCacheFace | undefined,
+  persist: () => SessionInspectionFace | undefined,
+): () => ProjectionCacheFace | undefined {
+  return () => {
+    const projections = cache()
+    const store = persist()
+    if (projections === undefined || store === undefined) return undefined
+    return {
+      coldSnapshot: async (sessionId) => {
+        const inspection = await store.inspect(sessionId)
+        return projections.coldSnapshot(
+          inspection.meta,
+          inspection.inheritedEventCount,
+          inspection.events,
+        )
+      },
+    }
+  }
+}
+
+/**
+ * Fold a conversation that this process's cache has no title for.
+ *
+ * Unlike {@link ProjectionRefolder.renamed}, this is a single read and a
+ * no-op when the listing already carries a name — so a host start does not
+ * re-fold every titled Code conversation.
+ * @param cache - the harness cache.
+ * @param persist - the store the log is read from.
+ * @param sessionId - the conversation.
+ * @returns true when a cold read ran.
+ */
+export async function catchUpUntitled(
+  cache: HostProjectionCacheFace,
+  persist: SessionInspectionFace,
+  sessionId: string,
+): Promise<boolean> {
+  try {
+    const inspection = await persist.inspect(sessionId)
+    const cached = cache.cachedSnapshot(inspection.meta, inspection.inheritedEventCount)
+    const title = cached?.values.title
+    if (typeof title === 'string' && title !== '') return false
+    cache.coldSnapshot(inspection.meta, inspection.inheritedEventCount, inspection.events)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**

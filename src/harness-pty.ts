@@ -37,7 +37,7 @@ import { chmodSync, existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import * as nodePty from 'node-pty'
-import { readOscTitle } from './osc-title.ts'
+import { namesConversation, readOscTitle } from './osc-title.ts'
 import { CodeError, messageOf } from './wire.ts'
 
 /** Transcript bytes kept per terminal for replay on reconnect. */
@@ -359,15 +359,18 @@ export class HarnessTerminalRegistry {
    *
    * Read from the tail of the accumulated transcript rather than from the
    * chunk, because a pty read can cut an escape sequence in half and the
-   * transcript is where the halves meet. The first announcement is the
+   * transcript is where the halves meet. The product-only greeting is the
    * terminal saying hello — every program sets a title when it starts — and
-   * only what comes after it is news.
+   * is not news. A title that already names the conversation is news even
+   * when it is the first announcement this process saw: a pty read can
+   * deliver the greeting and the generated name in one chunk, and only the
+   * last of those is visible.
    * @param terminal - the terminal whose output just grew.
    */
   private readTitle(terminal: CodeTerminal): void {
     const announced = readOscTitle(terminal.transcript.slice(-TITLE_SCAN_TAIL))
     if (announced === undefined || announced === terminal.title) return
-    const greeting = terminal.title === undefined
+    const greeting = terminal.title === undefined && !namesConversation(announced)
     terminal.title = announced
     if (!greeting) this.onRenamed?.(terminal)
   }

@@ -39,6 +39,24 @@ const TITLE_WRITER = [
   'process.stdin.resume();',
 ].join('')
 
+/**
+ * Greeting and generated name in ONE write — what a busy pty read actually
+ * delivers, and what used to be treated as a greeting because only the last
+ * announcement is visible.
+ */
+const TITLE_WRITER_BOTH = [
+  'const esc = String.fromCharCode(0x1b), bel = String.fromCharCode(0x07);',
+  'process.stdout.write(esc + "]0;DeepSeek Harness" + bel + esc + "]0;Unclear question — DeepSeek Harness" + bel);',
+  'process.stdin.resume();',
+].join('')
+
+/** A reconnect that only replayed the already-named window title. */
+const TITLE_WRITER_NAMED = [
+  'const esc = String.fromCharCode(0x1b), bel = String.fromCharCode(0x07);',
+  'process.stdout.write(esc + "]0;Unclear question — DeepSeek Harness" + bel);',
+  'process.stdin.resume();',
+].join('')
+
 const registries: HarnessTerminalRegistry[] = []
 
 /** A registry the suite always tears down, whatever the assertion does. */
@@ -185,6 +203,32 @@ describe('HarnessTerminalRegistry', () => {
     const terminal = await table.attach('code-session-1', tmpdir(), 80, 24)
     await until(() => terminal.title === 'second')
     expect(renamed).toEqual(['second'])
+  })
+
+  it('reports a name that arrived with the greeting in the same read', async () => {
+    const renamed: string[] = []
+    const table = new HarnessTerminalRegistry(
+      { file: process.execPath, args: ['-e', TITLE_WRITER_BOTH, '--'] },
+      undefined,
+      terminal => { renamed.push(terminal.title ?? '') },
+    )
+    registries.push(table)
+    const terminal = await table.attach('code-session-1', tmpdir(), 80, 24)
+    await until(() => terminal.title === 'Unclear question — DeepSeek Harness')
+    expect(renamed).toEqual(['Unclear question — DeepSeek Harness'])
+  })
+
+  it('reports a first announcement that already names the conversation', async () => {
+    const renamed: string[] = []
+    const table = new HarnessTerminalRegistry(
+      { file: process.execPath, args: ['-e', TITLE_WRITER_NAMED, '--'] },
+      undefined,
+      terminal => { renamed.push(terminal.title ?? '') },
+    )
+    registries.push(table)
+    const terminal = await table.attach('code-session-1', tmpdir(), 80, 24)
+    await until(() => terminal.title === 'Unclear question — DeepSeek Harness')
+    expect(renamed).toEqual(['Unclear question — DeepSeek Harness'])
   })
 
   it('reports no live terminal once its process is gone', async () => {

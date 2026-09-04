@@ -25,6 +25,8 @@
  * @module @omdsh-plugins/omdsh-codemode/src/client/title-sync
  */
 
+import { namesConversation } from '../osc-title.ts'
+
 /**
  * Delays before each baseline pull after a terminal announces a new name, in
  * milliseconds. See the module note: the first is for a rename already
@@ -93,10 +95,11 @@ export class TerminalTitleSync {
   /**
    * A terminal announced its window title.
    *
-   * The FIRST announcement for a conversation is a greeting, not news: a
-   * terminal states its title when it starts, and a reconnect replays that
-   * write with the rest of the transcript. It is recorded and nothing else, so
-   * entering Code mode costs no reads.
+   * The product-only greeting is not news: a terminal states its title when
+   * it starts, and a reconnect replays that write with the rest of the
+   * transcript. A title that already names the conversation is news even as
+   * the first announcement — unless the list already carries a name, which
+   * is the reconnect replaying a row this page already has.
    * @param sessionId - the Code conversation the terminal drives.
    * @param title - the announced window title, verbatim.
    */
@@ -104,9 +107,26 @@ export class TerminalTitleSync {
     if (this.disposed) return
     const previous = this.announcedTitles.get(sessionId)
     this.announcedTitles.set(sessionId, title)
-    if (previous === undefined || previous === title) return
+    if (previous === title) return
+    if (previous === undefined && !namesConversation(title)) return
+    if (previous === undefined && this.deps.listedTitle(sessionId) !== undefined) return
     this.cancel(sessionId)
     this.attemptFrom(0, sessionId, this.deps.listedTitle(sessionId))
+  }
+
+  /**
+   * Re-pull a conversation the list still has no title for.
+   *
+   * The host may fold the name a beat after this page's first baseline, so a
+   * Code row that booted as the project basename needs a later look without
+   * waiting for another OSC write.
+   * @param sessionId - the Code conversation.
+   */
+  catchUp(sessionId: string): void {
+    if (this.disposed) return
+    if (this.deps.listedTitle(sessionId) !== undefined) return
+    this.cancel(sessionId)
+    this.attemptFrom(0, sessionId, undefined)
   }
 
   /** Stop every pending pull (the column going away, or the plugin unloading). */

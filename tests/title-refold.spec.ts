@@ -1,7 +1,11 @@
 // Making this process re-read a conversation a terminal renamed underneath it.
 import { describe, expect, it } from 'vitest'
-import { ProjectionRefolder, REFOLD_SCHEDULE_MS } from '../src/title-refold.ts'
-import type { ProjectionCacheFace, RefoldClock } from '../src/title-refold.ts'
+import {
+  catchUpUntitled, projectionCacheFromHost, ProjectionRefolder, REFOLD_SCHEDULE_MS,
+} from '../src/title-refold.ts'
+import type {
+  HostProjectionCacheFace, ProjectionCacheFace, RefoldClock, SessionInspectionFace,
+} from '../src/title-refold.ts'
 
 /** A clock a spec runs by hand. */
 function fakeClock() {
@@ -109,5 +113,86 @@ describe('a conversation renamed in a terminal', () => {
 
   it('reads ahead of the browser half, so each list it pulls is already fresh', () => {
     expect([...REFOLD_SCHEDULE_MS]).toEqual([500, 3_000, 8_000])
+  })
+})
+
+describe('projectionCacheFromHost', () => {
+  it('inspects the log and asks the host cache to fold it', async () => {
+    const folds: Array<{ id: string; inherited: number; events: readonly unknown[] }> = []
+    const persist: SessionInspectionFace = {
+      inspect: async (id) => ({
+        meta: { id, createdAt: 1, isSeeded: false },
+        inheritedEventCount: 0,
+        events: [{ type: 'session/title' }],
+      }),
+    }
+    const host: HostProjectionCacheFace = {
+      cachedSnapshot: () => undefined,
+      coldSnapshot: (meta, inherited, events) => {
+        folds.push({ id: meta.id, inherited, events })
+        return { asOfSeq: 1, values: { title: 'Renamed' } }
+      },
+    }
+    const cache = projectionCacheFromHost(() => host, () => persist)()
+    const snap = await cache!.coldSnapshot('code-session-a')
+    expect(snap.values.title).toBe('Renamed')
+    expect(folds).toEqual([{
+      id: 'code-session-a', inherited: 0, events: [{ type: 'session/title' }],
+    }])
+  })
+
+  it('is off while either service is unpublished', () => {
+    const persist: SessionInspectionFace = {
+      inspect: async () => ({ meta: { id: 'x', createdAt: 1, isSeeded: false }, inheritedEventCount: 0, events: [] }),
+    }
+    const host: HostProjectionCacheFace = {
+      cachedSnapshot: () => undefined,
+      coldSnapshot: () => ({ asOfSeq: 0, values: {} }),
+    }
+    expect(projectionCacheFromHost(() => undefined, () => persist)()).toBeUndefined()
+    expect(projectionCacheFromHost(() => host, () => undefined)()).toBeUndefined()
+  })
+})
+
+describe('catchUpUntitled', () => {
+  const meta = { id: 'code-session-a', createdAt: 1, isSeeded: false }
+  const persist: SessionInspectionFace = {
+    inspect: async () => ({ meta, inheritedEventCount: 0, events: [{ type: 'session/title' }] }),
+  }
+
+  it('skips a conversation this process already has a title for', async () => {
+    let folded = 0
+    const host: HostProjectionCacheFace = {
+      cachedSnapshot: () => ({ asOfSeq: 1, values: { title: 'Greeting' } }),
+      coldSnapshot: () => {
+        folded++
+        return { asOfSeq: 1, values: { title: 'Greeting' } }
+      },
+    }
+    expect(await catchUpUntitled(host, persist, 'code-session-a')).toBe(false)
+    expect(folded).toBe(0)
+  })
+
+  it('folds a conversation whose cache row has no title', async () => {
+    let folded = 0
+    const host: HostProjectionCacheFace = {
+      cachedSnapshot: () => ({ asOfSeq: 0, values: {} }),
+      coldSnapshot: () => {
+        folded++
+        return { asOfSeq: 1, values: { title: 'Unclear question' } }
+      },
+    }
+    expect(await catchUpUntitled(host, persist, 'code-session-a')).toBe(true)
+    expect(folded).toBe(1)
+  })
+
+  it('survives a missing log', async () => {
+    const host: HostProjectionCacheFace = {
+      cachedSnapshot: () => undefined,
+      coldSnapshot: () => ({ asOfSeq: 0, values: {} }),
+    }
+    expect(await catchUpUntitled(host, {
+      inspect: async () => { throw new Error('not found') },
+    }, 'code-session-a')).toBe(false)
   })
 })

@@ -28,10 +28,13 @@ import {
 import { TERMINAL_PATH } from './shared.ts'
 import { bridge } from './terminal-socket.ts'
 import { remoteResolver, type RemoteWorkspaceFace } from './remote.ts'
-import { ProjectionRefolder, type ProjectionCacheFace } from './title-refold.ts'
+import {
+  catchUpUntitled, projectionCacheFromHost, ProjectionRefolder,
+  type HostProjectionCacheFace, type SessionInspectionFace, type StoredSessionMeta,
+} from './title-refold.ts'
 import { isTrustedRequest } from './trust-fence.ts'
 import {
-  conversationBegunFromLog, WorkspaceAccountant,
+  conversationBegunFromLog, RECONCILE_SCHEDULE_MS, WorkspaceAccountant,
   type SessionCatalogFace, type WorkspaceRegistryFace,
 } from './workspace-account.ts'
 import { CodeError, messageOf } from './wire.ts'
@@ -50,9 +53,14 @@ export {
 export type { CodeTerminal, HarnessCommand, PtyDisposable, PtyLike, PtySpawner } from './harness-pty.ts'
 export { REMDEV_SERVICE, remoteResolver } from './remote.ts'
 export type { RemdevFace, RemoteWorkspaceFace, ResolveRemote } from './remote.ts'
-export { readOscTitle } from './osc-title.ts'
-export { ProjectionRefolder, REFOLD_SCHEDULE_MS } from './title-refold.ts'
-export type { ProjectionCacheFace, RefoldClock } from './title-refold.ts'
+export { namesConversation, readOscTitle } from './osc-title.ts'
+export {
+  catchUpUntitled, projectionCacheFromHost, ProjectionRefolder, REFOLD_SCHEDULE_MS,
+} from './title-refold.ts'
+export type {
+  HostProjectionCacheFace, ProjectionCacheFace, RefoldClock,
+  SessionInspectionFace, StoredSessionMeta,
+} from './title-refold.ts'
 export {
   ATTACH_SCHEDULE_MS, conversationBegunFromLog, logShowsTurn, RECONCILE_SCHEDULE_MS,
   WorkspaceAccountant,
@@ -131,13 +139,22 @@ export function apply(ctx: Context, config: Config = {}): void {
     ...config.command === undefined ? {} : { command: config.command },
     ...config.args === undefined ? {} : { args: config.args },
   })
-  // Resolved late for the same reason as the workspace registry: the cache
-  // publishes after its storage dependencies start, and a composition without
-  // it lists no cold titles at all — which makes this a no-op rather than an
-  // error.
-  const projectionCache = (): ProjectionCacheFace | undefined =>
-    ctx.get('sessionProjectionCache') as unknown as ProjectionCacheFace | undefined
-  const refolder = new ProjectionRefolder(projectionCache)
+  // Persistence is resolved late for the same reason as the registry: it
+  // publishes after its storage backend starts, and a composition without
+  // it has no cold conversations to group. The probe reads the log the
+  // terminal actually wrote — `turn/start` — rather than a projection the
+  // web host folds. The terminal is another process and does not write
+  // `sessionListMetadata`, which is why every Code row used to stay in
+  // Ungrouped after a turn.
+  const sessionPersistence = (): SessionPersistenceFace | undefined =>
+    ctx.get('sessionPersistence') as unknown as SessionPersistenceFace | undefined
+  // The harness cache's cold read takes the stored header and the log, not
+  // a session id. The invented `coldSnapshot(sessionId)` this plugin used
+  // to call does not exist — every rename was swallowed and the sidebar
+  // kept the project basename. The adapter inspects the shared log first.
+  const hostCache = (): HostProjectionCacheFace | undefined =>
+    ctx.get('sessionProjectionCache') as unknown as HostProjectionCacheFace | undefined
+  const refolder = new ProjectionRefolder(projectionCacheFromHost(hostCache, sessionPersistence))
 
   // A conversation renamed inside a terminal is a durable change made by
   // another process, and this host read the projection table once, at boot —
@@ -148,15 +165,6 @@ export function apply(ctx: Context, config: Config = {}): void {
   // read at the moment a terminal is wanted.
   const resolveRemote = remoteResolver(name => ctx.get(name))
 
-  // Persistence is resolved late for the same reason as the registry: it
-  // publishes after its storage backend starts, and a composition without
-  // it has no cold conversations to group. The probe reads the log the
-  // terminal actually wrote — `turn/start` — rather than a projection the
-  // web host folds. The terminal is another process and does not write
-  // `sessionListMetadata`, which is why every Code row used to stay in
-  // Ungrouped after a turn.
-  const sessionPersistence = (): SessionPersistenceFace | undefined =>
-    ctx.get('sessionPersistence') as unknown as SessionPersistenceFace | undefined
   const accountant = new WorkspaceAccountant(
     workspaceRegistry,
     conversationBegunFromLog(async (sessionId) => {
@@ -198,7 +206,15 @@ export function apply(ctx: Context, config: Config = {}): void {
   // terminal this one will serve.
   ctx.effect(() => {
     accountant.reconcileSoon()
-    return () => { accountant.dispose() }
+    // Titles written by the terminal process after this host booted — or
+    // before this adapter existed — are not in this process's cache, so the
+    // sidebar shows the project basename. Fold those once persistence and
+    // the cache have published; already-titled rows are a no-op.
+    const stopTitles = scheduleTitleCatchUp(sessionPersistence, hostCache)
+    return () => {
+      stopTitles()
+      accountant.dispose()
+    }
   }, 'omdsh-codemode: group begun Code conversations, unaccount those that never began')
 
   /**
@@ -359,7 +375,13 @@ export function apply(ctx: Context, config: Config = {}): void {
               return
             }
             bridge(ws, terminal, terminals, {
-              onEnd: () => { void settle(remote, accountant, codeSessionId, cwd) },
+              onEnd: () => {
+                void settle(remote, accountant, codeSessionId, cwd)
+                // OSC can miss a rename (greeting and name in one chunk, a
+                // reconnect that only replayed the last title). Leaving the
+                // column is the last cheap moment to fold what the log has.
+                refolder.renamed(codeSessionId)
+              },
             })
           }).catch((error: unknown) => {
             ws.close(1011, messageOf(error).slice(0, 120))
@@ -415,18 +437,67 @@ async function settle(
  * composition without it must leave Code mode working rather than fail to
  * install.
  */
-interface SessionPersistenceFace {
+interface SessionPersistenceFace extends SessionInspectionFace {
   /**
-   * Read one conversation's stored events without publishing it.
+   * Read one conversation's stored header and events without publishing it.
    * @param sessionId - the conversation.
-   * @returns its events; rejects when the session has no log yet.
+   * @returns its identity and log; rejects when the session has no log yet.
    */
-  inspect(sessionId: string): Promise<{ events: readonly { type: string }[] }>
+  inspect(sessionId: string): Promise<{
+    meta: StoredSessionMeta
+    inheritedEventCount: number
+    events: readonly { type: string }[]
+  }>
   /**
    * Lightweight listing from metadata, without a full-log parse.
    * @returns one header per materialized session.
    */
   list(): Promise<readonly { id: string; cwd?: string }[]>
+}
+
+/**
+ * Fold untitled Code conversations once persistence and the projection cache
+ * have published, retrying only for want of either.
+ * @param persist - resolves the store.
+ * @param cache - resolves the harness cache.
+ * @param schedule - attempt delays; same cadence as the account sweep.
+ * @returns a disposer that cancels pending attempts.
+ */
+function scheduleTitleCatchUp(
+  persist: () => SessionPersistenceFace | undefined,
+  cache: () => HostProjectionCacheFace | undefined,
+  schedule: readonly number[] = RECONCILE_SCHEDULE_MS,
+): () => void {
+  let stopped = false
+  const handles: ReturnType<typeof setTimeout>[] = []
+  const attempt = (index: number): void => {
+    if (stopped) return
+    const delay = schedule[index]
+    if (delay === undefined) return
+    const handle = setTimeout(() => {
+      if (stopped) return
+      const store = persist()
+      const projections = cache()
+      if (store === undefined || projections === undefined) {
+        attempt(index + 1)
+        return
+      }
+      void store.list().then(async (headers) => {
+        for (const header of headers) {
+          if (stopped) return
+          if (!isCodeSessionId(header.id)) continue
+          await catchUpUntitled(projections, store, header.id)
+        }
+      }).catch(() => {})
+    }, delay)
+    handle.unref?.()
+    handles.push(handle)
+  }
+  attempt(0)
+  return () => {
+    stopped = true
+    for (const handle of handles) clearTimeout(handle)
+  }
 }
 
 /**

@@ -1,6 +1,6 @@
 // Reading a terminal's own window title out of its output.
 import { describe, expect, it } from 'vitest'
-import { readOscTitle } from '../src/osc-title.ts'
+import { namesConversation, readOscTitle } from '../src/osc-title.ts'
 
 const ESC = String.fromCharCode(0x1b)
 const BEL = String.fromCharCode(0x07)
@@ -43,5 +43,12 @@ describe('readOscTitle', () => {
 
   it('reads an empty title as the empty string rather than nothing', () => {
     expect(readOscTitle(title(''))).toBe('')
+  })
+})
+
+describe('namesConversation', () => {
+  it('is the TUI named-session form, not the product greeting', () => {
+    expect(namesConversation('DeepSeek Harness')).toBe(false)
+    expect(namesConversation('Unclear question — DeepSeek Harness')).toBe(true)
   })
 })
